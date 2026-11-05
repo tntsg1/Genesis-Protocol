@@ -23,14 +23,14 @@ func _init() -> void:
 
 func _center(st: int) -> Vector2:
 	# Four across the bar's width, under the caption row.
-	var gap := minf(GAP, (size.x - 90.0) / 3.0)
+	var gap := minf(GAP, (size.x - 90.0) / 4.0)
 	return Vector2(44.0 + st * gap, 58.0)
 
 
 func _process(_delta: float) -> void:
 	var h := -1
 	var m := get_local_mouse_position()
-	for st in 4:
+	for st in 5:
 		if _center(st).distance_to(m) < R + 6.0:
 			h = st
 	if h != _hover:
@@ -42,7 +42,7 @@ func _gui_input(e: InputEvent) -> void:
 	if not (e is InputEventMouseButton and e.pressed and e.button_index == MOUSE_BUTTON_LEFT):
 		return
 	accept_event()
-	for st in [1, 2, 3]:
+	for st in [1, 2, 3, 4]:
 		if hits.has("x%d" % st) and hits["x%d" % st].has_point(e.position):
 			ed.remove_state(st)
 			toast.call("已删除「%s」状态及其规则。按 Ctrl+Z 撤销。" % Rules.STATES[st][0])
@@ -59,7 +59,7 @@ func _gui_input(e: InputEvent) -> void:
 			toast.call("最多只能设置 %d 个状态。提高神经等级可以增加上限。" % max_states)
 		else:
 			ed.add_state(st)
-			toast.call({Rules.S_SLEEP: "已添加「休眠」状态。默认规则：休眠 20 秒后返回觅食。", Rules.S_ALERT: "已添加「警戒」状态。默认规则：猎手靠近 → 逃离，警戒 20 秒后返回觅食。", Rules.S_BREED: "已添加「繁殖期」状态。默认规则：逃离、分裂、游向藻团，40 秒后返回觅食。"}.get(st, "已添加「%s」状态。" % Rules.STATES[st][0]))
+			toast.call({Rules.S_SLEEP: "已添加「休眠」状态。默认规则：休眠 20 秒后返回觅食。", Rules.S_ALERT: "已添加「警戒」状态。默认规则：猎手靠近 → 逃离，警戒 20 秒后返回觅食。", Rules.S_BREED: "已添加「繁殖期」状态。默认规则：逃离、分裂、游向藻团，40 秒后返回觅食。", Rules.S_SPORE: "已添加「芽孢」状态。默认规则：天黑了 → 进入芽孢，天亮了 → 进入觅食（会先发芽约 8 秒）。"}.get(st, "已添加「%s」状态。" % Rules.STATES[st][0]))
 		queue_redraw()
 		return
 
@@ -104,7 +104,7 @@ func _draw() -> void:
 			var dir := (tip - line[line.size() - 2]).normalized()
 			var side := dir.orthogonal()
 			draw_colored_polygon(PackedVector2Array([tip + dir * 6.0, tip - dir * 3.0 + side * 4.5, tip - dir * 3.0 - side * 4.5]), Color(Ui.ACCENT, 0.9))
-	for st in 4:
+	for st in 5:
 		if not _shown(st):
 			continue
 		var c := _center(st)

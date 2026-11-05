@@ -74,6 +74,8 @@ public:
 		ACT_DISPERSE, // swimming away from the peers around it
 		ACT_SLUG,     // part of a crawling aggregate
 		ACT_AIR,      // swimming away from oxygen, or toward it (chapter 6)
+		ACT_HOME,     // going back to the spot it remembers (chapter 7)
+		ACT_SPORE,    // forming a spore, a spore, or germinating (chapter 7)
 	};
 
 	// Behaviour cards (GDD 3.2). Each organism carries its own deck, checked
@@ -101,6 +103,9 @@ public:
 		C_PEER_STATE,    // a peer in sight is in state t (needs the recognition protein)
 		C_IMMUNE,        // carries a memory of the phage (level 16; needs the memory fragment)
 		C_O2_ABOVE,      // oxygen here above t (0..1 of full; chapter 6)
+		C_FAR_MEM,       // further than t from the spot it remembers (chapter 7; needs the memory vesicle)
+		C_NIGHT,         // the long night is on (chapter 7)
+		C_DAY,           // it is day
 		C_COUNT,
 	};
 	enum Act : uint8_t {
@@ -127,10 +132,16 @@ public:
 		A_AGGREGATE,     // join the peers around it in one body that crawls as one (level 20)
 		A_AVOID_O2,      // swim toward the least oxygen in reach (chapter 6)
 		A_SEEK_O2,       // swim toward the most oxygen in reach
+		A_REMEMBER,      // remember this spot (chapter 7; passes to the daughters)
+		A_RETURN,        // swim back to the spot it remembers, along the ice where it blocks
+		A_TO_SPORE,      // switch to the spore state (chapter 7; needs the spore coat)
 		A_COUNT,
 	};
 	static constexpr int MAX_CARDS = 8;
-	enum State : uint8_t { S_FORAGE = 0, S_ALERT, S_BREED, S_SLEEP, S_COUNT };
+	// S_SPORE (chapter 7): the first SPORE_FORM seconds it forms (and is as
+	// open to harm as ever), then it is a spore: no cost, no ageing, no cold,
+	// not food; leaving, it germinates for SPORE_GERM seconds before it moves.
+	enum State : uint8_t { S_FORAGE = 0, S_ALERT, S_BREED, S_SLEEP, S_SPORE, S_COUNT };
 	static constexpr float JOIN_TIME = 2.0f;
 	float last_dt = 1.0f / 15.0f; // the last tick, to interpolate the division scene
 	struct Card {
@@ -221,6 +232,7 @@ public:
 		// level), 1 anaerobic (oxygen poisons it), 2 aerobic (food yields far
 		// more with oxygen, little without), 3 facultative (both, each a little worse).
 		int resp = 0;
+		float slow_divide = 1.0f; // chapter 7 (寿命): a long life divides this much dearer
 		bool reseed = true; // a chemosynthetic native drifts back out of the vents now and then (not a player's)
 		std::vector<Card> deck; // founders start with this deck
 		int alive = 0;
@@ -247,8 +259,8 @@ public:
 		int cfood = -1; // chapter 6: a producer cell a grazer can eat
 		float fx = 0, fy = 0, sx = 0, sy = 0, threat_d = 1e9f;
 		int ncand = 0;
-		int peer[4] = { -1, -1, -1, -1 }; // nearest peer in sight in each state
-		float peer_d2[4] = { 1e18f, 1e18f, 1e18f, 1e18f };
+		int peer[5] = { -1, -1, -1, -1, -1 }; // nearest peer in sight in each state
+		float peer_d2[5] = { 1e18f, 1e18f, 1e18f, 1e18f, 1e18f };
 		int cand[PREY_CAND];
 		float cand_d[PREY_CAND]; // true distance
 	};
@@ -272,6 +284,7 @@ public:
 	};
 	struct TempSpot {
 		float x, y, r, delta, life, ttl;
+		bool brine = false; // chapter 7: salt, not heat (drawn so)
 	};
 	struct Jet {
 		float x, y, r, vx, vy, life, ttl;
@@ -325,6 +338,33 @@ private:
 	double net_fed = 0.0;
 	int net_caught = 0;
 	void step_net(float dt);
+	// Chapter 7: the ice (walls nothing crosses and nothing sees through),
+	// the long night, salt (brine: the water there does not freeze).
+	std::vector<Barrier> walls;
+	bool night_now = false;
+	float divide_min_temp = -1000.0f; // chapter 7: colder water than this, no dividing
+	// Chapter 7 boss (7-5): a heliozoan (太阳虫) lying in wait at a junction
+	// of the ice. Its axopods reach `reach` all round, not through ice; what
+	// they touch is caught and drawn in along them, drained, then eaten. It
+	// burns all the while and starves if nothing comes; it moves between
+	// its spots now and then. A closed spore is not caught.
+	struct Helio {
+		bool on = false;
+		float x = 0.0f, y = 0.0f, tx = 0.0f, ty = 0.0f;
+		float energy = 0.0f, full = 1000.0f, burn = 4.0f, reach = 150.0f, body = 34.0f;
+		float catch_rate = 1.2f, pull = 26.0f, drain = 6.0f, gain = 0.8f, speed = 10.0f;
+		float move_every = 70.0f, move_t = 0.0f;
+		int spot = 0, caught = 0, eaten = 0;
+		bool dead = false;
+	};
+	Helio helio;
+	std::vector<Vector2> helio_spots;
+	std::vector<int> held; // the heliozoan has this cell (1) or not
+	void step_helio(float dt);
+	float light_scale = 1.0f;
+	float spore_form = 8.0f, spore_germ = 8.0f;
+	bool sight_blocked(float ax, float ay, float bx, float by) const;
+	bool spore_closed(int i) const { return state[i] == S_SPORE && st_time[i] >= spore_form && germ[i] <= 0.0f; }
 	float net_at(float wx, float wy) const;
 	bool o2_dir(int i, bool up, float &dx, float &dy) const;
 	float resp_gain(int i) const;
@@ -354,6 +394,8 @@ private:
 	// Gene-expression state (觅食 / 警戒 / 繁殖期 / 休眠) and seconds in it.
 	std::vector<uint8_t> state;
 	std::vector<float> st_time;
+	// Chapter 7: the spot it remembers (NAN: none) and its germination left.
+	std::vector<float> mem_x, mem_y, germ;
 	std::vector<float> t_neural, hurt, threat_d, tgx, tgy;
 	// Thermal genes and the environmental drain last tick (for explanations
 	// and the cause of death).
@@ -664,6 +706,19 @@ public:
 	float get_o2_share(float above) const;
 	// Chapter 6 boss: {on, center, core, radius, need, grow, shrink, drain, slow, use}.
 	void set_net(Dictionary params);
+	// Chapter 7.
+	void add_wall(Vector2 a, Vector2 b);
+	void clear_walls() { walls.clear(); }
+	PackedVector2Array get_walls() const;
+	void set_night(bool on) { night_now = on; }
+	void set_divide_min_temp(float t) { divide_min_temp = t; }
+	// {spots: [Vector2], energy, full, burn, reach, body, catch_rate, pull, drain, gain, speed, move_every}
+	void set_helio(Dictionary params);
+	Dictionary get_helio() const;
+	bool get_night() const { return night_now; }
+	void set_light_scale(float s);
+	void set_spore_times(float form, float germinate) { spore_form = form; spore_germ = germinate; }
+	int add_brine(Vector2 pos, float radius, float delta, float seconds);
 	PackedFloat32Array get_net_field() const;
 	// {coverage (share of the dish's water under the net), caught, fed}.
 	Dictionary get_net_stats() const;

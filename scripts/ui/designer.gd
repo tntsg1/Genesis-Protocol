@@ -85,6 +85,11 @@ var genes := [2.0, 2.0, 1.0, 1.0, 3.0, 3.0, 3.0, 3.0]
 # The water it likes best (deg C): chosen freely, it costs no budget.
 var temp_opt := 12.0
 var temp_slider: Control
+# Chapter 7 (寿命, DECISIONS Q232): how long its cells live, ×0.5..×2; a long
+# life divides dearer, a short one cheaper. A slider under fertility, open
+# where the level says (life_open), costing no budget.
+var life := 1.0
+var life_slider: Control
 var mutates := true # natural mutation (off = the line stays exactly as designed)
 var resp := Resp.ANAEROBIC # chapter 6: how it breathes (a switch from 6-4: Resp)
 var resp_pill: Widgets.Pill
@@ -1147,6 +1152,14 @@ func _build_gene_panel() -> void:
 				deck_editor._sync_views()
 			_refresh())
 		cell.add_child(slider)
+		if k == 4:
+			life_slider = LifeSlider.new(life)
+			life_slider.changed.connect(func(val: float) -> void:
+				life = val
+				select_gene(4)
+				_refresh())
+			life_slider.visible = bool(level_rules.get("life_open", false))
+			cell.add_child(life_slider)
 		if k == 7:
 			temp_slider = TempSlider.new(temp_opt)
 			temp_slider.changed.connect(func(val: float) -> void:
@@ -1588,6 +1601,10 @@ func _apply_design(d: Dictionary, record := false) -> void:
 	_set_temp_opt(float(d.get("temp_opt", 12.0)))
 	_set_mutates(bool(d.get("mutates", true)))
 	_set_resp(int(d.get("resp", level_rules.get("resp", Resp.ANAEROBIC))))
+	life = float(d.get("life", 1.0))
+	if life_slider:
+		life_slider.value = life
+		life_slider.queue_redraw()
 	_set_organs(d.get("organs", []))
 	color = d.color
 	name_edit.text = d.name
@@ -1681,7 +1698,7 @@ func apply_reference() -> void:
 
 func _design() -> Dictionary:
 	return {name = name_edit.text.strip_edges() if name_edit.text.strip_edges() != "" else "未命名物种",
-		color = color, genes = genes.duplicate(), deck = deck_editor.deck.duplicate(true), temp_opt = temp_opt, mutates = mutates, resp = resp,
+		color = color, genes = genes.duplicate(), deck = deck_editor.deck.duplicate(true), temp_opt = temp_opt, mutates = mutates, resp = resp, life = life,
 		organs = organs.duplicate(), persona = persona, bold = bold, blocks = body_bench.cells.duplicate(true) if body_bench else []}
 
 
@@ -2277,6 +2294,11 @@ func _params_from(d: Dictionary) -> Dictionary:
 		deck = d.deck,
 	}, d.get("organs", []))
 	params.merge(Rules.masks(level_id(), d.get("organs", [])), true)
+	# Chapter 7: the life slider.
+	var lf: float = float(d.get("life", 1.0)) if bool(level_rules.get("life_open", false)) else 1.0
+	params.life = lf
+	params.lifespan = float(params.lifespan) * lf
+	params.slow_divide = LifeSlider.divide_cost(lf)
 	# Chapter 6: how it breathes (the level's fixed way until the switch opens).
 	params.resp = int(d.get("resp", Resp.ANAEROBIC)) if resp_open() else int(level_rules.get("resp", 0))
 	if not (d.get("blocks", []) as Array).is_empty():
@@ -2488,6 +2510,50 @@ class GeneSlider extends Control:
 
 # The preferred water temperature, -5 to 45 deg C: a cold-to-hot track with
 # the dish's waters marked on it.
+class LifeSlider extends Control:
+	signal changed(value: float)
+	const LO := 0.5
+	const HI := 2.0
+	var value := 1.0
+	var _drag := false
+
+	# What dividing costs at a life of `v` (×1 at ×1): dearer for a long life.
+	static func divide_cost(v: float) -> float:
+		return 1.0 + 0.7 * (v - 1.0) if v >= 1.0 else 1.0 - 0.4 * (1.0 - v)
+
+	func _init(v: float) -> void:
+		value = v
+		custom_minimum_size = Vector2(320, 26)
+		mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND
+		tooltip_text = "寿命（不花预算）：活得越久，分裂需要的能量越多；寿命短，分裂更便宜"
+
+	func _x_of(v: float) -> float:
+		return 8.0 + (size.x - 16.0) * (v - LO) / (HI - LO)
+
+	func _gui_input(event: InputEvent) -> void:
+		if event is InputEventMouseButton and (event as InputEventMouseButton).button_index == MOUSE_BUTTON_LEFT:
+			_drag = event.pressed
+			_set_from(event.position.x)
+		elif event is InputEventMouseMotion and _drag:
+			_set_from(event.position.x)
+
+	func _set_from(px: float) -> void:
+		var v := snappedf(clampf(LO + (px - 8.0) / (size.x - 16.0) * (HI - LO), LO, HI), 0.1)
+		if v != value:
+			value = v
+			queue_redraw()
+			changed.emit(v)
+
+	func _draw() -> void:
+		var y := size.y * 0.5
+		draw_line(Vector2(_x_of(LO), y), Vector2(_x_of(HI), y), Color(Ui.ACCENT, 0.35), 3.0)
+		draw_line(Vector2(_x_of(1.0), y - 5.0), Vector2(_x_of(1.0), y + 5.0), Color(Ui.INK_FAINT, 0.8), 1.0)
+		var kx := _x_of(value)
+		draw_circle(Vector2(kx, y), 6.0, Color.WHITE)
+		draw_arc(Vector2(kx, y), 6.0, 0, TAU, 24, Ui.ACCENT, 1.6, true)
+		draw_string(Ui.mono("Medium"), Vector2(kx + 9.0, y - 4.0), "寿命 ×%.1f · 分裂所需 ×%.2f" % [value, divide_cost(value)], HORIZONTAL_ALIGNMENT_LEFT, -1, 10, Ui.INK)
+
+
 class TempSlider extends Control:
 	signal changed(value: float)
 	const LO := -5.0

@@ -600,7 +600,7 @@ static func level_params(l: Dictionary, params: Dictionary) -> Dictionary:
 		tune.merge(params.get("tune", {}), true)
 		p.merge(Colony.params(params.blocks, tune), true)
 	if l.has("lifespan"):
-		p.lifespan = float(l.lifespan)
+		p.lifespan = float(l.lifespan) * float(params.get("life", 1.0)) # (chapter 7: the life slider still counts)
 	if l.has("keep_act"):
 		p.keep_act = int(l.keep_act)
 	if l.has("prophage"):

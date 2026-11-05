@@ -3,16 +3,17 @@ extends RefCounted
 # Behaviour-card vocabulary (GDD 3.2). Ids match SimCore's Cond / Act enums;
 # a card is {c1, t1, c2, t2, act} with c = 0 meaning "no condition".
 
-enum { C_NONE, C_ENERGY_BELOW, C_ENERGY_ABOVE, C_SEE_ALGAE, C_PREDATOR_NEAR, C_SEE_PREY, C_CROWD, C_ATTACKED, C_AGE_ABOVE, C_SEE_SHELL, C_TEMP_BAD, C_SIGNAL_A, C_SIGNAL_B, C_PREY_NEAR, C_PREY_SMALL, C_STATE_TIME, C_PEER_STATE, C_IMMUNE, C_O2_ABOVE }
-enum { A_SEEK_ALGAE, A_FLEE, A_HUNT, A_FOLLOW, A_REST, A_DIVIDE, A_WANDER, A_SCAVENGE, A_EMIT_A, A_EMIT_B, A_SEEK_COMFORT, A_TO_FORAGE, A_TO_ALERT, A_TO_BREED, A_TO_SLEEP, A_SEEK_SIG_A, A_SEEK_SIG_B, A_SECRETE, A_DISPERSE, A_INDUCE, A_AGGREGATE, A_AVOID_O2, A_SEEK_O2 }
+enum { C_NONE, C_ENERGY_BELOW, C_ENERGY_ABOVE, C_SEE_ALGAE, C_PREDATOR_NEAR, C_SEE_PREY, C_CROWD, C_ATTACKED, C_AGE_ABOVE, C_SEE_SHELL, C_TEMP_BAD, C_SIGNAL_A, C_SIGNAL_B, C_PREY_NEAR, C_PREY_SMALL, C_STATE_TIME, C_PEER_STATE, C_IMMUNE, C_O2_ABOVE, C_FAR_MEM, C_NIGHT, C_DAY }
+enum { A_SEEK_ALGAE, A_FLEE, A_HUNT, A_FOLLOW, A_REST, A_DIVIDE, A_WANDER, A_SCAVENGE, A_EMIT_A, A_EMIT_B, A_SEEK_COMFORT, A_TO_FORAGE, A_TO_ALERT, A_TO_BREED, A_TO_SLEEP, A_SEEK_SIG_A, A_SEEK_SIG_B, A_SECRETE, A_DISPERSE, A_INDUCE, A_AGGREGATE, A_AVOID_O2, A_SEEK_O2, A_REMEMBER, A_RETURN, A_TO_SPORE }
 # Gene-expression states (DECISIONS 第十一轮): each has its own cards.
-enum { S_FORAGE, S_ALERT, S_BREED, S_SLEEP }
+enum { S_FORAGE, S_ALERT, S_BREED, S_SLEEP, S_SPORE }
 # [name, en, what it does to the body, opens]
 const STATES := [
 	["觅食", "FORAGE", "平常的样子：没有加成", ""],
 	["警戒", "ALERT", "游速 +25%，感知范围 +30%，能量消耗 ×1.4。", "2-4"],
 	["繁殖期", "BREED", "能量达到 60% 就能分裂，分裂冷却时间减半。不过，能量消耗增加 30%，新生细胞的初始能量也会减少。", "2-5"],
 	["休眠", "SLEEP", "进入休眠后，细胞几乎不动，能量消耗降到平时的四分之一，衰老速度也会减慢。", "2-3"],
+	["芽孢", "SPORE", "先花约 8 秒形成芽孢（这时最脆弱）。之后不耗能、不衰老、不怕冷也不怕热，也不会被吃。离开芽孢时要先发芽约 8 秒，才能再动。", "7-2"],
 ]
 
 # [name, threshold kind, min, max, default, step, help]
@@ -36,6 +37,9 @@ const CONDS := [
 	["看见同伴在", "state", 0, 3, 2, 1, "视野里有处于 X 状态的同伴（要识别蛋白）。和“跟随同伴”放在一张卡上时，就游向那只同伴"],
 	["有免疫记忆", "", 0, 0, 0, 0, "这只细胞身上存着裂囊针的一段 DNA（要记忆片段）。可以加“不”，写给还没有记忆的细胞"],
 	["氧气高于", "o2", 0.02, 0.6, 0.08, 0.01, "所在位置的氧气浓度高于 X。"],
+	["离记忆点超过", "distance", 20, 600, 150, 10, "离自己记住的地方超过 X µm。还没记住任何地方时不成立（要记忆泡）。"],
+	["天黑了", "", 0, 0, 0, 0, "长夜开始了：没有光，水会结冰。"],
+	["天亮了", "", 0, 0, 0, 0, "白天：有光，水温正常。"],
 ]
 # [name, help]
 const ACTS := [
@@ -62,12 +66,15 @@ const ACTS := [
 	["聚合", "和身边的同伴聚成一个整体：不再进食，也不会变老，朝光爬；爬到藻场边长成子实体，约两成细胞牺牲成柄，其余变成孢子。已经在目标藻场上时这张卡跳过。"],
 	["避开氧气", "游向附近氧气最少的水。已经在无氧的水里时跳过。"],
 	["游向氧气", "游向附近氧气最多的水。四周都没有更多氧气时跳过。"],
+	["记住这里", "把现在的位置记下来（只记一个地方，新的会覆盖旧的）。分裂出来的后代也记得（要记忆泡）。"],
+	["回到记忆点", "游回记住的地方；被冰挡住时沿着冰壁绕。还没记住任何地方、或已经在那里时跳过（要记忆泡）。"],
+	["进入芽孢", "切换到「芽孢」状态：先花约 8 秒形成芽孢，形成后不耗能、不怕冷、不会被吃（要芽孢外壳）。"],
 ]
 const SLOTS := [3, 4, 5, 6, 8]
 # Where each library piece opens in the campaign (DECISIONS 第十轮 Q7/Q11):
 # a level id ("1-4") or a whole chapter ("2"). The sandbox has them all.
-const COND_OPENS := ["", "1-3", "1-3", "1-3", "1-3", "2-1", "1-5", "2-2", "1-5", "2", "1-4", "3-1", "3-4", "2-1", "2-1", "2-3", "3-2", "4-2", "6-3"]
-const ACT_OPENS := ["1-3", "1-3", "2-1", "1-5", "1-3", "1-3", "1-3", "2", "3-1", "3-4", "1-4", "2-3", "2-4", "2-5", "2-3", "3-1", "3-4", "3-3", "4-1", "4-3", "5-1", "6-3", "6-4"]
+const COND_OPENS := ["", "1-3", "1-3", "1-3", "1-3", "2-1", "1-5", "2-2", "1-5", "2", "1-4", "3-1", "3-4", "2-1", "2-1", "2-3", "3-2", "4-2", "6-3", "7-1", "7-2", "7-2"]
+const ACT_OPENS := ["1-3", "1-3", "2-1", "1-5", "1-3", "1-3", "1-3", "2", "3-1", "3-4", "1-4", "2-3", "2-4", "2-5", "2-3", "3-1", "3-4", "3-3", "4-1", "4-3", "5-1", "6-3", "6-4", "7-1", "7-1", "7-2"]
 
 
 # “不” on a condition and “或” between two open from level 7 (DECISIONS Q21).
@@ -131,7 +138,7 @@ static func slots(neural: float) -> int:
 
 # How many states a species can use (DECISIONS 第十一轮 Q20: the neural gene).
 static func max_states(neural: float) -> int:
-	return [1, 1, 2, 3, 4][clampi(roundi(neural), 1, 5) - 1]
+	return [1, 1, 2, 3, 5][clampi(roundi(neural), 1, 5) - 1]
 
 
 static func state_open(st: int, level_id: String) -> bool:
@@ -140,6 +147,8 @@ static func state_open(st: int, level_id: String) -> bool:
 
 # The state a "进入 X" action goes to, or -1.
 static func target_state(act: int) -> int:
+	if act == A_TO_SPORE:
+		return S_SPORE
 	return act - A_TO_FORAGE if act >= A_TO_FORAGE and act <= A_TO_SLEEP else -1
 
 
@@ -170,7 +179,7 @@ static func threshold_text(c: int, t: float) -> String:
 		"signal": return "%.2f" % t
 		"ratio": return "我的 %d%%" % roundi(t * 100.0)
 		"seconds": return "%d 秒" % roundi(t)
-		"state": return STATES[clampi(roundi(t), 0, 3)][0]
+		"state": return STATES[clampi(roundi(t), 0, 4)][0]
 		"o2": return "%d%%" % roundi(t * 100.0)
 	return ""
 

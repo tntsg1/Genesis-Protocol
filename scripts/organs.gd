@@ -33,7 +33,8 @@ const LIST := [
 	{id = "recog", name = "识别蛋白", en = "RECOGNITION PROTEIN", opens = "3-2",
 		desc = "膜上的标记：能认出同伴，看得出它们处在什么状态。", needs = {cond = [Rules.C_PEER_STATE]}, body = {}},
 	{id = "memory", name = "记忆泡", en = "MEMORY VESICLE", opens = "7-1",
-		desc = "能记住一个地方和一个数。", needs = {}, body = {}},
+		desc = "能记住一个地方：「记住这里」把现在的位置存下来，「回到记忆点」游回去，后代也记得（原型：细菌趋化的短期记忆）。",
+		needs = {cond = [Rules.C_FAR_MEM], act = [Rules.A_REMEMBER, Rules.A_RETURN]}, body = {}},
 	{id = "crispr", name = "记忆片段", en = "MEMORY FRAGMENT", opens = "4-2",
 		desc = "被扎中时有一点机会把病毒的 DNA 剪碎，活下来，并留下一段当记忆。有记忆的细胞和它的后代，再被扎也不怕。", needs = {cond = [Rules.C_IMMUNE]}, body = {crispr = 0.12}},
 	# Chapter 6 (DECISIONS Q211 / Q206 / Q220): the way a species eats. With
@@ -44,6 +45,10 @@ const LIST := [
 	{id = "photo", name = "光合膜", en = "PHOTOSYNTHETIC MEMBRANE", opens = "6-2", pair = "diet",
 		desc = "在光里制造养分并放出氧气（原型：蓝细菌）。装上后不再进食，只靠光获得能量，越亮越多；游速降低 40%。",
 		needs = {}, body = {diet = 3, speed_mult = 0.6}},
+	# Chapter 7 (DECISIONS Q231): the spore coat opens the spore state.
+	{id = "spore", name = "芽孢外壳", en = "SPORE COAT", opens = "7-2",
+		desc = "能把自己封进一层厚壳，变成芽孢：不吃不动，冻不死、煮不死、吃不掉，等环境变好再发芽（原型：枯草芽孢杆菌的芽孢）。",
+		needs = {act = [Rules.A_TO_SPORE]}, body = {}},
 ]
 
 

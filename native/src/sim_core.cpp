@@ -145,6 +145,10 @@ SimCore::SimCore() {
 	fired.resize(n);
 	state.resize(n);
 	st_time.resize(n);
+	mem_x.assign(n, NAN);
+	held.assign(n, 0);
+	mem_y.assign(n, NAN);
+	germ.assign(n, 0.0f);
 	for (auto *v : { &t_neural, &hurt, &threat_d, &tgx, &tgy, &t_topt, &t_ttol, &stress_t, &stress_a, &join,
 				 &sw, &psw, &curl, &ha, &hb, &vs, &angv, &latch, &gulp_t, &gulp_r, &gulp_lx, &gulp_ly, &gulp_h, &gulp_ph }) {
 		v->resize(n);
@@ -217,6 +221,12 @@ void SimCore::setup(Vector2 world_size, int seed) {
 	net_tmp.assign(gw * gh, 0.0f);
 	net_on = false;
 	net_phase = 0;
+	walls.clear();
+	night_now = false;
+	divide_min_temp = -1000.0f;
+	helio = Helio();
+	helio_spots.clear();
+	light_scale = 1.0f;
 	net_fed = 0.0;
 	net_caught = 0;
 	o2_phase = 0;
@@ -299,6 +309,7 @@ int SimCore::add_species(Dictionary p) {
 	s.rest_cost = (float)(double)p.get("rest_cost", 1.0);
 	s.store = (float)(double)p.get("store", 0.0);
 	s.resp = (int)p.get("resp", 0);
+	s.slow_divide = (float)(double)p.get("slow_divide", 1.0);
 	s.reseed = (bool)p.get("reseed", true);
 	s.rotifer = p.get("rotifer", false);
 	if (s.rotifer) {
@@ -536,7 +547,7 @@ void SimCore::rebuild_env() {
 			vent[c] = v;
 			chem[c] = ch;
 			vent_total += v;
-			light[c] = in ? light_base[c] * m : 0.0f;
+			light[c] = in ? light_base[c] * m * light_scale : 0.0f;
 		}
 	}
 	(void)n;
@@ -1252,6 +1263,10 @@ int SimCore::spawn_one(int s, float wx, float wy, int parent) {
 	fired[i] = -1;
 	state[i] = S_FORAGE; // newborns start foraging (DECISIONS 第十二轮 Q23)
 	st_time[i] = 0.0f;
+	germ[i] = 0.0f;
+	held[i] = 0;
+	mem_x[i] = parent >= 0 ? mem_x[parent] : NAN; // (the daughters remember too)
+	mem_y[i] = parent >= 0 ? mem_y[parent] : NAN;
 	threat_d[i] = 1e9f;
 	tgx[i] = wx;
 	tgy[i] = wy;
@@ -1532,11 +1547,13 @@ void SimCore::step_interventions(float dt) {
 // inside its thickness) is put back on the side it came from, and its
 // velocity into the membrane is reflected.
 void SimCore::enforce_barriers() {
-	if (barriers.empty()) {
+	if (barriers.empty() && walls.empty()) {
 		return;
 	}
 	const float half = 4.0f;
-	for (const Barrier &b : barriers) {
+	const int nb = (int)barriers.size();
+	for (int bi = 0; bi < nb + (int)walls.size(); bi++) {
+		const Barrier &b = bi < nb ? barriers[bi] : walls[bi - nb]; // (chapter 7: the ice, for good)
 		float ex = b.bx - b.ax, ey = b.by - b.ay;
 		float len2 = std::max(ex * ex + ey * ey, 1e-3f);
 		float len = std::sqrt(len2);
@@ -1581,7 +1598,7 @@ Array SimCore::get_interventions() const {
 	}
 	for (const TempSpot &sp : temp_spots) {
 		Dictionary d;
-		d["kind"] = sp.delta >= 0.0f ? "warm" : "cold";
+		d["kind"] = sp.brine ? "brine" : (sp.delta >= 0.0f ? "warm" : "cold");
 		d["center"] = Vector2(sp.x, sp.y);
 		d["radius"] = sp.r;
 		d["delta"] = sp.delta;
@@ -1745,6 +1762,10 @@ void SimCore::move_agent(int w, int r) {
 	fired[w] = fired[r];
 	state[w] = state[r];
 	st_time[w] = st_time[r];
+	mem_x[w] = mem_x[r];
+	held[w] = held[r];
+	mem_y[w] = mem_y[r];
+	germ[w] = germ[r];
 	hurt[w] = hurt[r];
 	threat_d[w] = threat_d[r];
 	tgx[w] = tgx[r];
@@ -1835,7 +1856,7 @@ float SimCore::divide_energy(int i) const {
 	float r = species[sp[i]].radius;
 	// Breeding: splits at six tenths (leaner children; the cooldown halves too).
 	return (r * r * (2.6f - 0.22f * t_fertility[i] + METAB_DIVIDE * (t_efficiency[i] - 3.0f)) + body_energy(sp[i])) * (1.0f + 0.2f * species[sp[i]].store)
-			* (state[i] == S_BREED ? 0.6f : 1.0f);
+			* (state[i] == S_BREED ? 0.6f : 1.0f) * species[sp[i]].slow_divide;
 }
 
 bool SimCore::cond_true(int i, uint8_t c, float t) const {
@@ -1855,7 +1876,16 @@ bool SimCore::cond_true(int i, uint8_t c, float t) const {
 		case C_SIGNAL_A: return sig_a[nutrient_index(x[i], y[i])] > t;
 		case C_SIGNAL_B: return sig_b[nutrient_index(x[i], y[i])] > t;
 		case C_STATE_TIME: return st_time[i] > t;
-		case C_PEER_STATE: return scans[i].peer[std::min(3, std::max(0, (int)t))] >= 0;
+		case C_PEER_STATE: return scans[i].peer[std::min(4, std::max(0, (int)t))] >= 0;
+		case C_FAR_MEM: {
+			if (std::isnan(mem_x[i])) {
+				return false;
+			}
+			float dx = mem_x[i] - x[i], dy = mem_y[i] - y[i];
+			return dx * dx + dy * dy > t * t;
+		}
+		case C_NIGHT: return night_now;
+		case C_DAY: return !night_now;
 		case C_IMMUNE: return immune[i] != 0;
 		case C_O2_ABOVE: return o2_on && o2[nutrient_index(x[i], y[i])] > t;
 		case C_PREY_NEAR:
@@ -1933,7 +1963,7 @@ bool SimCore::act_possible(int i, uint8_t a) const {
 			if (S.colony) {
 				return gest[i] < 0.0f && energy[i] >= S.col_e && cooldown[i] <= 0.0f && !S.col_germ.empty();
 			}
-			return energy[i] > body_energy(sp[i]) + S.radius * S.radius * 0.8f && cooldown[i] <= 0.0f && count < MAX_AGENTS && (inf_t[i] < 0.0f || inf_fate[i] == 2);
+			return energy[i] > body_energy(sp[i]) + S.radius * S.radius * 0.8f && cooldown[i] <= 0.0f && count < MAX_AGENTS && (inf_t[i] < 0.0f || inf_fate[i] == 2) && state[i] != S_SPORE && temp[nutrient_index(x[i], y[i])] >= divide_min_temp && !held[i];
 		case A_SCAVENGE: return (sense[i] & S_SHELL) != 0;
 		case A_SEEK_COMFORT: {
 			float dx, dy;
@@ -1949,6 +1979,15 @@ bool SimCore::act_possible(int i, uint8_t a) const {
 			float dx, dy;
 			return o2_dir(i, a == A_SEEK_O2, dx, dy);
 		}
+		case A_REMEMBER: return true;
+		case A_RETURN: {
+			if (std::isnan(mem_x[i])) {
+				return false;
+			}
+			float dx = mem_x[i] - x[i], dy = mem_y[i] - y[i];
+			return dx * dx + dy * dy > 25.0f * 25.0f;
+		}
+		case A_TO_SPORE: return state[i] != S_SPORE;
 		case A_TO_FORAGE:
 		case A_TO_ALERT:
 		case A_TO_BREED:
@@ -2135,6 +2174,10 @@ void SimCore::scan_one(int i) {
 						sy -= ey / d * (t2 - d) * share;
 					}
 				}
+				// Chapter 7: nothing is seen through the ice.
+				if (!walls.empty() && sight_blocked(x[i], y[i], x[j], y[j])) {
+					continue;
+				}
 				if (sp[j] == sp[i]) {
 					// Peers in sight by the state they are in (level 12: “看见
 					// 处于 X 状态的同伴”).
@@ -2165,7 +2208,7 @@ void SimCore::scan_one(int i) {
 				}
 				bool they_eat_me = T.diet == DIET_PREDATOR && r < T.radius * 0.9f;
 				// (Chapter 6: a hunter goes after what moves; producers are grazed, not hunted.)
-				bool i_eat_them = S.diet == DIET_PREDATOR && T.radius < r * 0.9f && T.diet != DIET_PHOTO;
+				bool i_eat_them = S.diet == DIET_PREDATOR && T.radius < r * 0.9f && T.diet != DIET_PHOTO && !spore_closed(j);
 				if (they_eat_me && d2 < threat_d2) {
 					threat_d2 = d2;
 					threat = j;
@@ -2253,6 +2296,9 @@ void SimCore::scan_one(int i) {
 					if (d2 > vision_r * vision_r) {
 						continue;
 					}
+					if (!walls.empty() && sight_blocked(x[i], y[i], al_x[a], al_y[a])) {
+						continue;
+					}
 					float score = al_e[a] / (std::sqrt(d2) + 12.0f);
 					if (score > best) {
 						best = score;
@@ -2298,6 +2344,7 @@ void SimCore::step(float dt) {
 	step_signals(dt);
 	step_oxygen(dt);
 	step_net(dt);
+	step_helio(dt);
 	auto t1 = clk::now();
 	step_algae(dt);
 	step_shells(dt);
@@ -2340,6 +2387,10 @@ void SimCore::step(float dt) {
 		}
 		if (slug[i] >= 0) {
 			action[i] = ACT_SLUG;
+			continue;
+		}
+		if (held[i]) {
+			action[i] = ACT_FLEE; // (struggling; step_helio draws it in)
 			continue;
 		}
 		if (spore[i] > 0.0f) {
@@ -2501,7 +2552,7 @@ void SimCore::step(float dt) {
 			if (cd.act == A_FOLLOW && !cd.any) {
 				for (int m = 0; m < 2; m++) {
 					if (cd.c[m] == C_PEER_STATE && !(cd.neg & (1 << m))) {
-						peer_to = sc.peer[std::min(3, std::max(0, (int)cd.t[m]))];
+						peer_to = sc.peer[std::min(4, std::max(0, (int)cd.t[m]))];
 						peer_card = true;
 					}
 				}
@@ -2795,11 +2846,56 @@ void SimCore::step(float dt) {
 				tgx[i] = x[i] + dirx * 60.0f;
 				tgy[i] = y[i] + diry * 60.0f;
 			} break;
+			case A_REMEMBER:
+				mem_x[i] = x[i];
+				mem_y[i] = y[i];
+				want = 0.2f;
+				break;
+			case A_RETURN: {
+				// Straight for it; where the ice is in the way, along the ice
+				// (whichever way along it leads nearer).
+				float dx = mem_x[i] - x[i], dy = mem_y[i] - y[i];
+				float d = std::max(1e-3f, std::sqrt(dx * dx + dy * dy));
+				dirx = dx / d;
+				diry = dy / d;
+				const float probe = 36.0f;
+				for (const Barrier &w : walls) {
+					float ex = w.bx - w.ax, ey = w.by - w.ay;
+					float l2 = std::max(ex * ex + ey * ey, 1e-3f);
+					float tt = clampf(((x[i] - w.ax) * ex + (y[i] - w.ay) * ey) / l2, 0.0f, 1.0f);
+					float qx = w.ax + ex * tt - x[i], qy = w.ay + ey * tt - y[i];
+					if (qx * qx + qy * qy < probe * probe && qx * dirx + qy * diry > 0.0f) {
+						float l = std::sqrt(l2);
+						float tx = ex / l, ty = ey / l;
+						if (tx * dirx + ty * diry < 0.0f) {
+							tx = -tx;
+							ty = -ty;
+						}
+						dirx = tx;
+						diry = ty;
+						break;
+					}
+				}
+				wander[i] = std::atan2(diry, dirx);
+				want = clampf(d / 60.0f, 0.25f, 0.9f);
+				act = ACT_HOME;
+				tgx[i] = mem_x[i];
+				tgy[i] = mem_y[i];
+			} break;
+			case A_TO_SPORE:
+				state[i] = S_SPORE;
+				st_time[i] = 0.0f;
+				germ[i] = 0.0f;
+				want = 0.0f;
+				break;
 			case A_TO_FORAGE:
 			case A_TO_ALERT:
 			case A_TO_BREED:
 			case A_TO_SLEEP:
 				// Switching takes the tick; the new state's cards run next.
+				if (state[i] == S_SPORE && st_time[i] >= spore_form) {
+					germ[i] = spore_germ; // (out of a spore: it germinates first)
+				}
 				state[i] = (uint8_t)(todo - A_TO_FORAGE);
 				st_time[i] = 0.0f;
 				want = 0.2f;
@@ -2810,6 +2906,12 @@ void SimCore::step(float dt) {
 				break;
 		}
 		// State physiology (DECISIONS 第十二轮 Q22): asleep it barely moves.
+		// Chapter 7: a spore forming, a spore, a spore germinating: still.
+		germ[i] = std::max(0.0f, germ[i] - dt);
+		if (state[i] == S_SPORE || germ[i] > 0.0f) {
+			want = 0.0f;
+			act = ACT_SPORE;
+		}
 		if (state[i] == S_SLEEP) {
 			want = std::min(want, 0.12f);
 		}
@@ -3094,7 +3196,7 @@ void SimCore::step(float dt) {
 		float size = r / 6.0f;
 		float base = 0.45f * S.size_factor * (1.3f - 0.09f * t_efficiency[i]) * (1.0f - 0.2f * S.store);
 		// State costs: asleep very little; alert and breeding run hot.
-		static const float STATE_BASE[4] = { 1.0f, 1.4f, 1.3f, 0.1f };
+		static const float STATE_BASE[5] = { 1.0f, 1.4f, 1.3f, 0.1f, 1.0f };
 		base *= STATE_BASE[state[i]] * S.burn;
 		float sv = spd / 50.0f;
 		float move = 0.32f * sv * sv * size * S.move_cost;
@@ -3120,6 +3222,10 @@ void SimCore::step(float dt) {
 		stress_t[i] = st;
 		stress_a[i] = sa + so;
 		float own = std::max(0.0f, base + move + upkeep);
+		if (spore_closed(i)) {
+			own = st = sa = so = sn = 0.0f; // (sealed: cold, poison, the net cannot reach it)
+			stress_t[i] = stress_a[i] = 0.0f;
+		}
 		float cost = std::min(energy[i], (own + st + sa + so + sn) * dt);
 		{
 			Species &W = species[sp[i]];
@@ -3140,7 +3246,7 @@ void SimCore::step(float dt) {
 		}
 		// Dormancy slows the clock as well as the metabolism: a lurking
 		// hunter can outlast a lean spell instead of ageing out in it.
-		age[i] += state[i] == S_SLEEP ? dt * 0.25f : (resting ? dt * 0.5f : dt);
+		age[i] += spore_closed(i) ? 0.0f : (state[i] == S_SLEEP ? dt * 0.25f : (resting ? dt * 0.5f : dt));
 		cooldown[i] -= dt;
 		digest[i] -= dt;
 		if (act != ACT_BITE) {
@@ -6012,6 +6118,180 @@ Dictionary SimCore::get_net_stats() const {
 	return d;
 }
 
+
+// --- chapter 7: the ice, the night, salt --------------------------------------
+
+void SimCore::add_wall(Vector2 a, Vector2 b) {
+	walls.push_back({ a.x, a.y, b.x, b.y, 0.0f, 1e30f });
+}
+
+PackedVector2Array SimCore::get_walls() const {
+	PackedVector2Array out;
+	for (const Barrier &w : walls) {
+		out.push_back(Vector2(w.ax, w.ay));
+		out.push_back(Vector2(w.bx, w.by));
+	}
+	return out;
+}
+
+// Does a straight line from a to b cross any ice?
+bool SimCore::sight_blocked(float ax, float ay, float bx, float by) const {
+	const float rx = bx - ax, ry = by - ay;
+	for (const Barrier &w : walls) {
+		const float sx = w.bx - w.ax, sy = w.by - w.ay;
+		const float den = rx * sy - ry * sx;
+		if (std::abs(den) < 1e-6f) {
+			continue;
+		}
+		const float qx = w.ax - ax, qy = w.ay - ay;
+		const float t = (qx * sy - qy * sx) / den;
+		const float u = (qx * ry - qy * rx) / den;
+		if (t > 0.0f && t < 1.0f && u >= 0.0f && u <= 1.0f) {
+			return true;
+		}
+	}
+	return false;
+}
+
+void SimCore::set_light_scale(float s) {
+	light_scale = s;
+	rebuild_env();
+}
+
+int SimCore::add_brine(Vector2 pos, float radius, float delta, float seconds) {
+	TempSpot sp { pos.x, pos.y, radius, delta, 0.0f, seconds };
+	sp.brine = true;
+	temp_spots.push_back(sp);
+	rebuild_env();
+	return (int)temp_spots.size() - 1;
+}
+
+
+// --- chapter 7 boss: the heliozoan ------------------------------------------------
+
+void SimCore::set_helio(Dictionary p) {
+	helio = Helio();
+	helio_spots.clear();
+	Array spots = p.get("spots", Array());
+	for (int k = 0; k < spots.size(); k++) {
+		helio_spots.push_back(spots[k]);
+	}
+	if (helio_spots.empty()) {
+		return;
+	}
+	helio.on = true;
+	helio.x = helio.tx = helio_spots[0].x;
+	helio.y = helio.ty = helio_spots[0].y;
+	helio.full = p.get("full", helio.full);
+	helio.energy = (float)p.get("energy", 0.7f) * helio.full;
+	helio.burn = p.get("burn", helio.burn);
+	helio.reach = p.get("reach", helio.reach);
+	helio.body = p.get("body", helio.body);
+	helio.catch_rate = p.get("catch_rate", helio.catch_rate);
+	helio.pull = p.get("pull", helio.pull);
+	helio.drain = p.get("drain", helio.drain);
+	helio.gain = p.get("gain", helio.gain);
+	helio.speed = p.get("speed", helio.speed);
+	helio.move_every = p.get("move_every", helio.move_every);
+	helio.move_t = helio.move_every;
+}
+
+void SimCore::step_helio(float dt) {
+	Helio &H = helio;
+	if (!H.on || H.dead) {
+		return;
+	}
+	// It burns all the while; nothing caught for long enough, it starves.
+	H.energy -= H.burn * dt;
+	energy_out += H.burn * dt;
+	if (H.energy <= 0.0f) {
+		H.energy = 0.0f;
+		H.dead = true;
+		for (int i = 0; i < count; i++) {
+			held[i] = 0;
+		}
+		return;
+	}
+	// Moving on to its next spot now and then (its arms drawn in meanwhile).
+	H.move_t -= dt;
+	if (H.move_t <= 0.0f && helio_spots.size() > 1) {
+		H.spot = (H.spot + 1) % (int)helio_spots.size();
+		H.tx = helio_spots[H.spot].x;
+		H.ty = helio_spots[H.spot].y;
+		H.move_t = H.move_every;
+	}
+	float mx = H.tx - H.x, my = H.ty - H.y;
+	float md = std::sqrt(mx * mx + my * my);
+	bool moving = md > 2.0f;
+	if (moving) {
+		float stp = std::min(md, H.speed * dt);
+		H.x += mx / md * stp;
+		H.y += my / md * stp;
+	}
+	// Catching (not while it rolls along), and drawing in what it holds.
+	for (int i = 0; i < count; i++) {
+		if (!alive[i] || join[i] > 0.0f) {
+			continue;
+		}
+		float dx = H.x - x[i], dy = H.y - y[i];
+		float d = std::sqrt(dx * dx + dy * dy) + 1e-4f;
+		if (!held[i]) {
+			if (moving || d > H.reach || spore_closed(i) || species[sp[i]].colony) {
+				continue;
+			}
+			if (!walls.empty() && sight_blocked(H.x, H.y, x[i], y[i])) {
+				continue;
+			}
+			// Nearer the body, the more axopods it brushes.
+			float p = H.catch_rate * (1.0f - d / H.reach) * dt;
+			if (randf() < p) {
+				held[i] = 1;
+				H.caught++;
+			}
+			continue;
+		}
+		float stp = std::min(d, H.pull * dt);
+		x[i] += dx / d * stp;
+		y[i] += dy / d * stp;
+		vx[i] = vy[i] = 0.0f;
+		float take = std::min(std::max(0.0f, energy[i]), H.drain * dt);
+		energy[i] -= take;
+		H.energy += take * H.gain;
+		energy_out += take * (1.0f - H.gain);
+		if (d < H.body || energy[i] <= 0.5f) {
+			float rest = std::max(0.0f, energy[i]) + body_energy(sp[i]);
+			H.energy += rest * H.gain;
+			energy_out += rest * (1.0f - H.gain);
+			energy[i] = 0.0f;
+			held[i] = 0;
+			H.eaten++;
+			kill(i, CAUSE_EATEN);
+		}
+	}
+	H.energy = std::min(H.energy, H.full * 1.5f);
+}
+
+Dictionary SimCore::get_helio() const {
+	Dictionary d;
+	d["on"] = helio.on;
+	d["dead"] = helio.dead;
+	d["pos"] = Vector2(helio.x, helio.y);
+	d["target"] = Vector2(helio.tx, helio.ty);
+	d["energy_frac"] = helio.full > 0.0f ? helio.energy / helio.full : 0.0f;
+	d["reach"] = helio.reach;
+	d["body"] = helio.body;
+	d["caught"] = helio.caught;
+	d["eaten"] = helio.eaten;
+	d["moving"] = std::abs(helio.tx - helio.x) + std::abs(helio.ty - helio.y) > 2.0f;
+	d["next_move"] = helio.move_t;
+	int holding = 0;
+	for (int i = 0; i < count; i++) {
+		holding += alive[i] && held[i] ? 1 : 0;
+	}
+	d["holding"] = holding;
+	return d;
+}
+
 Dictionary SimCore::get_stats() const {
 	Dictionary d;
 	Array per;
@@ -6193,6 +6473,17 @@ void SimCore::_bind_methods() {
 	ClassDB::bind_method(D_METHOD("add_light_band", "y_full", "y_dark", "power"), &SimCore::add_light_band);
 	ClassDB::bind_method(D_METHOD("set_oxygen", "params"), &SimCore::set_oxygen);
 	ClassDB::bind_method(D_METHOD("set_net", "params"), &SimCore::set_net);
+	ClassDB::bind_method(D_METHOD("add_wall", "a", "b"), &SimCore::add_wall);
+	ClassDB::bind_method(D_METHOD("set_divide_min_temp", "t"), &SimCore::set_divide_min_temp);
+	ClassDB::bind_method(D_METHOD("set_helio", "params"), &SimCore::set_helio);
+	ClassDB::bind_method(D_METHOD("get_helio"), &SimCore::get_helio);
+	ClassDB::bind_method(D_METHOD("clear_walls"), &SimCore::clear_walls);
+	ClassDB::bind_method(D_METHOD("get_walls"), &SimCore::get_walls);
+	ClassDB::bind_method(D_METHOD("set_night", "on"), &SimCore::set_night);
+	ClassDB::bind_method(D_METHOD("get_night"), &SimCore::get_night);
+	ClassDB::bind_method(D_METHOD("set_light_scale", "scale"), &SimCore::set_light_scale);
+	ClassDB::bind_method(D_METHOD("set_spore_times", "form", "germinate"), &SimCore::set_spore_times);
+	ClassDB::bind_method(D_METHOD("add_brine", "pos", "radius", "delta", "seconds"), &SimCore::add_brine);
 	ClassDB::bind_method(D_METHOD("get_net_field"), &SimCore::get_net_field);
 	ClassDB::bind_method(D_METHOD("get_net_stats"), &SimCore::get_net_stats);
 	ClassDB::bind_method(D_METHOD("add_iron", "pos", "radius", "seconds"), &SimCore::add_iron);

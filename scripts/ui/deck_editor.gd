@@ -134,6 +134,9 @@ func add_state(st: int) -> void:
 	edit(func() -> void:
 		# (Breeding stays longer: the bot found 40 s beat 20 s at level 10.)
 		var back := Rules.card(Rules.C_STATE_TIME, 40.0 if st == Rules.S_BREED else 20.0, Rules.C_NONE, 0.0, Rules.A_TO_FORAGE)
+		# A spore comes out when day comes (chapter 7), and foraging goes in at nightfall.
+		if st == Rules.S_SPORE:
+			back = Rules.card(Rules.C_DAY, 0.0, Rules.C_NONE, 0.0, Rules.A_TO_FORAGE)
 		back.st = st
 		deck.append(back)
 		# Sleep also gets a way in, so the new state works from the first try:
@@ -147,6 +150,14 @@ func add_state(st: int) -> void:
 				if int(deck[k].get("st", 0)) == Rules.S_FORAGE:
 					at = k
 			deck.insert(at, nap)
+		if st == Rules.S_SPORE and deck.size() < slots and not deck.any(func(cd: Dictionary) -> bool: return cd.act == Rules.A_TO_SPORE):
+			var dusk := Rules.card(Rules.C_NIGHT, 0.0, Rules.C_NONE, 0.0, Rules.A_TO_SPORE)
+			var first := deck.size() - 1
+			for k in deck.size():
+				if int(deck[k].get("st", 0)) == Rules.S_FORAGE:
+					first = k
+					break
+			deck.insert(first, dusk)
 		# Alert comes with what alert is for: "hunter near -> flee" above
 		# its way back (level 9 teaches wiring the way in and the calm-down).
 		# (At 100 µm: alert sees 30% further, and a flee nearer than the way in

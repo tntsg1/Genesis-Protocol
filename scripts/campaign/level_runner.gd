@@ -116,6 +116,7 @@ func open_designer(last_design := {}) -> void:
 	rules.organ_slots = level.get("organ_slots", 0)
 	rules.resp = level.get("resp", 0)
 	rules.resp_open = level.get("resp_open", false)
+	rules.life_open = level.get("life_open", false)
 	rules.require_organs = level.get("require_organs", [])
 	rules.forbid_organs = level.get("forbid_organs", [])
 	if level.has("species"):
@@ -144,7 +145,7 @@ func on_design(params: Dictionary) -> void:
 		used += Resp.cost(int(params.get("resp", 0)))
 	design = {params = params, genes = genes, used = used,
 		design = {name = params.name, color = params.color, genes = genes, deck = params.deck, temp_opt = params.get("temp_opt", 12.0), mutates = params.get("mutates", true),
-			organs = params.get("organs", []), resp = params.get("resp", 0)}}
+			organs = params.get("organs", []), resp = params.get("resp", 0), life = params.get("life", 1.0)}}
 	if params.has("virus"):
 		design.virus = params.virus
 		design.design.virus = params.virus # (a retry starts from these points)
