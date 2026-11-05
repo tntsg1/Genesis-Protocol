@@ -30,7 +30,11 @@ func _until(cond: Callable, limit := 10.0) -> bool:
 
 func _shot(name: String) -> void:
 	await RenderingServer.frame_post_draw
-	root.get_texture().get_image().save_png("%s/%s.png" % [dir, name])
+	# (The viewport holds linear colour under hdr_2d: as the screen shows it.)
+	var img := root.get_texture().get_image()
+	img.convert(Image.FORMAT_RGBA8)
+	img.linear_to_srgb()
+	img.save_png("%s/%s.png" % [dir, name])
 	print("shot ", name)
 
 

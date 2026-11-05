@@ -35,3 +35,10 @@ window/stretch/aspect="expand"
 
 rendering_device/driver.windows="d3d12"
 viewport/hdr_2d=true
+
+[shader_globals]
+
+night={
+"type": "float",
+"value": 0.0
+}
