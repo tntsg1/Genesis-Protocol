@@ -1,0 +1,20 @@
+#!/usr/bin/env python
+# Build: G:/toolchains/scons-venv/bin/scons platform=windows use_mingw=yes api_version=4.7 target=template_debug
+import os
+
+env = SConscript("godot-cpp/SConstruct")
+env.Append(CPPPATH=["src/"])
+# MinGW's ld needs its own DLLs (zstd etc.) on PATH; scons strips the PATH.
+env["ENV"]["PATH"] = os.environ.get("PATH", "")
+# ld 2.4x on this MSYS2 fails (exit 116) when asked for an import library;
+# Godot loads the DLL directly, so none is needed.
+env["no_import_lib"] = 1
+if env.get("use_mingw"):
+    env.Append(LINKFLAGS=["-static", "-static-libgcc", "-static-libstdc++"])
+
+sources = Glob("src/*.cpp")
+library = env.SharedLibrary(
+    "../bin/libgenesis{}{}".format(env["suffix"], env["SHLIBSUFFIX"]),
+    source=sources,
+)
+Default(library)

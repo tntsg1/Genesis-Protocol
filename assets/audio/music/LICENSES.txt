@@ -1,0 +1,9 @@
+创生协议 背景音乐来源（2026-10-29 起）
+全部由用户用 Suno 生成（生物科技 / 科幻实验室风格，提示词见与 Claude 的对话），原文件在用户的下载文件夹：
+menu.ogg   = sterile white laboratory（Suno）
+dish.ogg   = Biotech Observation（Suno）
+lab.ogg    = Biotech Observation 第二版（Suno，同一提示词的另一首）
+result.ogg = Success Alert（Suno）
+处理：tools/import_suno_music.py —— 去首尾静音、背景曲尾部 6 秒等功率交叉淡入到开头做无缝循环，响度归一（背景 −22 LUFS，结算 −18 LUFS），Vorbis q5。
+上市前请确认所用 Suno 账号的订阅档位允许商用（免费档生成的曲子不能商用）。
+此前的 CC0 曲目（Yoiyami / SRG774）备份在 G:\audio_library\work\genesis_music_backup_cc0\。

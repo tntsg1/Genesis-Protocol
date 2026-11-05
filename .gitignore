@@ -1,0 +1,19 @@
+# Godot
+.godot/
+*.tmp
+
+# 本地产物：测试截图、录像、导出包
+/proofs/
+/recordings/
+/build/
+
+# 原生扩展：编译中间文件、被编辑器占用时临时链接的旧 DLL
+*.o
+*.obj
+*.os
+.sconsign*.dblite
+/bin/old*/
+/bin/libgenesis.*.[b-z].dll
+
+# 临时脚本
+*_tmp.py
