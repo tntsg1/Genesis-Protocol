@@ -162,6 +162,20 @@ static func look(role: String) -> Dictionary:
 	return {} if l.is_empty() else {name = str(l.name), color = Color.html(str(l.color))}
 
 
+# One-time scenes seen (chapter 6's landfall: "arrival_6").
+static func seen(key: String) -> bool:
+	ensure()
+	return bool(data.get("seen", {}).get(key, false))
+
+
+static func mark_seen(key: String) -> void:
+	ensure()
+	if not data.has("seen"):
+		data.seen = {}
+	data.seen[key] = true
+	save()
+
+
 # Tests start from a clean slate (their own file only).
 static func reset_for_tests() -> void:
 	if path() == TEST_PATH:

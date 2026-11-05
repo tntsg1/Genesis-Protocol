@@ -45,6 +45,7 @@ const SULFUR_FEW := {label = "硫泉游丝", role = "sulfur", params = SULFUR,
 const LEVELS := [
 	{
 		id = "6-1", index = 25, name = "着陆", en = "LANDFALL", depth = 1.2,
+		arrival = true,
 		director = SHIP_AI,
 		teach = "化能合成：硫化酶与热泉",
 		role = "sulfur",

@@ -3,7 +3,9 @@ shader_type canvas_item;
 // square: lit from `light` (screen direction toward the sun), turning (`spin`),
 // with a thin atmosphere at the limb. kind 0 Jupiter: belts and zones that
 // shear into each other, the Great Red Spot; kind 1 Europa: pale ice crossed
-// by the reddish-brown lineae.
+// by the reddish-brown lineae; kind 2 planet one (chapter 6, arrival.gd): an
+// ocean over the whole world, a few volcanic island arcs, long swirls of
+// cloud, and a thin hazy air with no oxygen in it.
 
 uniform int kind = 0;
 uniform vec2 light = vec2(-0.7, -0.35);
@@ -76,6 +78,21 @@ vec3 europa(float lon, float lat) {
 	return mix(ice, vec3(0.6, 0.4, 0.3), lines * 0.7);
 }
 
+vec3 ocean(float lon, float lat) {
+	vec2 uv = vec2(lon * 1.4, lat * 2.0);
+	float depth = fbm(uv * 1.6 + 7.0);
+	vec3 sea = mix(vec3(0.1, 0.36, 0.5), vec3(0.2, 0.56, 0.62), smoothstep(0.35, 0.7, depth));
+	// Island arcs: chains of small dark specks with a pale shallow ring.
+	float arc = abs(smooth2(uv * 1.1 + 3.0) - 0.5);
+	float isle = smoothstep(0.03, 0.0, arc) * smoothstep(0.55, 0.75, noise(uv * 14.0));
+	sea = mix(sea, vec3(0.5, 0.78, 0.76), smoothstep(0.06, 0.0, arc) * 0.35);
+	sea = mix(sea, vec3(0.32, 0.26, 0.22), isle);
+	// Clouds, sheared along the latitudes.
+	float c = fbm(vec2(lon * 2.2 + fbm(uv * 2.0) * 1.5, lat * 6.0));
+	sea = mix(sea, vec3(0.95, 0.96, 0.94), smoothstep(0.55, 0.78, c) * 0.85);
+	return sea;
+}
+
 void fragment() {
 	vec2 p = (UV * 2.0 - 1.0) * pad;
 	float r2 = dot(p, p);
@@ -83,13 +100,13 @@ void fragment() {
 	// The atmosphere's glow just past the limb, on the lit side.
 	float out_r = max(sqrt(r2) - 1.0, 0.0);
 	float lit_side = clamp(dot(normalize(p), normalize(light)) * 0.8 + 0.4, 0.0, 1.0);
-	float halo = exp(-out_r * (kind == 0 ? 28.0 : 60.0)) * lit_side * (kind == 0 ? 0.45 : 0.2);
-	vec3 halo_col = kind == 0 ? vec3(0.95, 0.85, 0.7) : vec3(0.8, 0.9, 1.0);
+	float halo = exp(-out_r * (kind == 0 ? 28.0 : (kind == 2 ? 34.0 : 60.0))) * lit_side * (kind == 0 ? 0.45 : (kind == 2 ? 0.4 : 0.2));
+	vec3 halo_col = kind == 0 ? vec3(0.95, 0.85, 0.7) : (kind == 2 ? vec3(0.85, 0.9, 0.82) : vec3(0.8, 0.9, 1.0));
 	float z = sqrt(max(1.0 - r2, 0.0));
 	vec3 n = vec3(p, z);
 	float lat = asin(clamp(p.y, -1.0, 1.0));
 	float lon = atan(p.x, z) + spin;
-	vec3 col = kind == 0 ? jupiter(lon, lat) : europa(lon, lat);
+	vec3 col = kind == 0 ? jupiter(lon, lat) : (kind == 2 ? ocean(lon, lat) : europa(lon, lat));
 	float d = dot(n, l);
 	float shade = smoothstep(-0.03, 0.14, d) * (0.55 + 0.45 * max(d, 0.0));
 	// Limb darkening, and a thin haze at the edge.
@@ -97,7 +114,7 @@ void fragment() {
 	// The game's grade: colours held back toward a cool grey, so the space
 	// shots sit with the dark-field dish (true colours, quieter).
 	float lum = dot(col, vec3(0.3, 0.55, 0.15));
-	col = mix(col, vec3(lum) * vec3(0.9, 0.98, 1.04), 0.4) * 0.86;
+	col = mix(col, vec3(lum) * vec3(0.9, 0.98, 1.04), kind == 2 ? 0.2 : 0.4) * 0.86;
 	// Night side: Europa faintly lit by Jupiter (jupitershine).
 	float night = kind == 1 ? 0.07 : 0.015;
 	col *= night + (1.0 - night) * shade;

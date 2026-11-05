@@ -868,6 +868,15 @@ func _freeze(under_page := false) -> Control:
 
 
 func start_level(l: Dictionary) -> void:
+	# Chapter 6: the landfall on planet one plays before 6-1, the first time
+	# (scripts/ui/arrival.gd; tests skip it).
+	var testing := "-s" in OS.get_cmdline_args() or "--script" in OS.get_cmdline_args()
+	if l.get("arrival", false) and not CampaignSave.seen("arrival_6") and not testing:
+		CampaignSave.mark_seen("arrival_6")
+		var a: CanvasLayer = preload("res://scripts/ui/arrival.gd").new()
+		add_child(a)
+		a.finished.connect(func() -> void: start_level(l))
+		return
 	# From the campaign page: the frame freezes, a lens opens at the station
 	# and grows over the screen; under it the level's dish is already there,
 	# far and soft, and racks into focus as the camera comes down to the
