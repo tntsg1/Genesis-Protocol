@@ -1,9 +1,14 @@
 shader_type canvas_item;
+
+#include "res://shaders/night.gdshaderinc"
 // Chapter 6's oxygen (DECISIONS Q215): in the dish a faint cyan wash and a
 // few small bubbles where the water holds oxygen; in the analysis view (X,
 // layer 氧气) a clear map: anoxic water violet-grey, oxygen cyan to bright
 // teal, and the 8% line (where it starts to poison an anaerobe) drawn white.
 // The field comes from SimCore.get_o2_field (one float per 16 µm cell).
+// At night (night.gdshaderinc) the map glows on the dark water: anoxic water
+// a deep dim violet, oxygen a sea-green light growing brighter, the 8% line
+// warm white.
 
 uniform sampler2D o2_tex : filter_linear, repeat_disable;
 uniform vec2 rect_pos;
@@ -65,19 +70,20 @@ void fragment() {
 	}
 	// The map.
 	if (map_amount > 0.001) {
-		vec3 none = vec3(0.42, 0.4, 0.62);
-		vec3 some = vec3(0.3, 0.78, 0.86);
-		vec3 rich = vec3(0.12, 0.62, 0.62);
+		// (Written as is: linear values under hdr_2d.)
+		vec3 none = mix(vec3(0.42, 0.4, 0.62), vec3(0.008, 0.005, 0.02), night);
+		vec3 some = mix(vec3(0.3, 0.78, 0.86), vec3(0.01, 0.09, 0.075), night);
+		vec3 rich = mix(vec3(0.12, 0.62, 0.62), vec3(0.06, 0.5, 0.3), night);
 		vec3 m = o < tox ? mix(none, some, smoothstep(0.0, tox, o) * 0.5) : mix(some, rich, smoothstep(tox, 0.35, o));
 		float a = 0.5;
 		// Iso-lines every 5%, and the poison line at `tox` in white.
 		float s = o / 0.05;
 		float fw = max(fwidth(s), 1e-4);
 		float iso = 1.0 - smoothstep(0.0, fw * 1.2, abs(fract(s + 0.5) - 0.5));
-		m = mix(m, m * 0.7, iso * 0.5);
+		m = mix(m, mix(m * 0.7, m * 1.8 + 0.03, night), iso * 0.5);
 		float ft = max(fwidth(o), 1e-5);
 		float tline = 1.0 - smoothstep(ft * 0.8, ft * 2.4, abs(o - tox));
-		m = mix(m, vec3(1.0), tline);
+		m = mix(m, mix(vec3(1.0), vec3(1.0, 0.86, 0.66), night), tline);
 		a = max(a, tline * 0.95);
 		col = mix(col, vec4(m, a), map_amount);
 	}

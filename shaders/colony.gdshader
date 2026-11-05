@@ -1,4 +1,6 @@
 shader_type canvas_item;
+
+#include "res://shaders/night.gdshaderinc"
 // One block of a colony (level 21, Volvox), or a grain of grit. A flagellum
 // block is a patch of small cells with a pair of whips on each open side,
 // beating in a wave along the rim; walled in, they lie still and pale. A germ
@@ -1046,6 +1048,11 @@ void fragment() {
 				o = over(o, mix(tint * 0.5, vec3(0.42, 0.4, 0.36), 0.5), clamp(0.5 - dd, 0.0, 1.0) * 0.6 * torn);
 			}
 		}
+	}
+	if (night > 0.0) {
+		// Night (深海荧光): lit from within in its own colour.
+		o.rgb = mix(o.rgb, nt_lin(night_glow(nt_srgb(max(o.rgb, vec3(0.0))), nt_srgb(max(tint, vec3(0.0))))), night);
+		o.a = mix(o.a, min(1.0, o.a * 1.25), night);
 	}
 	COLOR = o;
 }

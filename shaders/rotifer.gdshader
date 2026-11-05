@@ -1,4 +1,6 @@
 shader_type canvas_item;
+
+#include "res://shaders/night.gdshaderinc"
 // Level 24's vent guardian, a rotifer (a bdelloid like Philodina): a glassy,
 // telescoping body; at the front the corona, two wheels of cilia beating in a
 // wave that runs round them so they seem to turn; behind the mouth the mastax,
@@ -168,5 +170,10 @@ void fragment() {
 		}
 	}
 	o.a *= 1.0 - 0.4 * dead;
+	if (night > 0.0) {
+		// Night (深海荧光): lit from within in its own colour.
+		o.rgb = mix(o.rgb, nt_lin(night_glow(nt_srgb(max(o.rgb, vec3(0.0))), nt_srgb(max(glass, vec3(0.0))))), night);
+		o.a = mix(o.a, min(1.0, o.a * 1.25), night);
+	}
 	COLOR = o;
 }

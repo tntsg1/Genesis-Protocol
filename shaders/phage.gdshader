@@ -1,4 +1,6 @@
 shader_type canvas_item;
+
+#include "res://shaders/night.gdshaderinc"
 // One phage (裂囊针), drawn from distance fields so it stays sharp at any zoom:
 // a faceted head holding its DNA, a collar, a striped tail sheath over a thin
 // tube, a base plate, and six jointed tail fibres. From afar it is a speck.
@@ -157,6 +159,11 @@ void fragment() {
 		float r = min(0.34, max(0.11, 1.5 * k0));
 		float dot_a = fill(length(v_q) - r, k0 * 1.5 * (1.0 + depth));
 		o = mix(o, vec4(mix(ink, dna, 0.34), dot_a * 0.7), small);
+	}
+	if (night > 0.0) {
+		// Night (深海荧光): lit from within in its own colour.
+		o.rgb = mix(o.rgb, nt_lin(night_glow(nt_srgb(max(o.rgb, vec3(0.0))), nt_srgb(max(vec3(0.55, 0.6, 0.86), vec3(0.0))))), night);
+		o.a = mix(o.a, min(1.0, o.a * 1.25), night);
 	}
 	COLOR = vec4(o.rgb, o.a * alpha * (1.0 - 0.45 * depth));
 }

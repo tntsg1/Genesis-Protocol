@@ -3,8 +3,14 @@
 //   ripples and soft shafts; particles hanging at three depths (parallax
 //   with the camera); a faint green tint where nutrient is dissolved; rock and coral growing along the inside of the
 //   glass; the glass rim catching the light; the bench outside.
+// At night (深海荧光, night.gdshaderinc) the water is a warm deep black with
+// motes of light drifting at two depths, the vents breathe a warm glow, the
+// coral's polyps and the hand's wake light up, the instrument's grid stays
+// a faint holo line; the stage outside goes to dark enamel.
 shader_type canvas_item;
 render_mode unshaded;
+
+#include "res://shaders/night.gdshaderinc"
 
 uniform sampler2D nutrient_tex : filter_linear;
 uniform sampler2D light_tex : filter_linear;
@@ -189,6 +195,21 @@ float specks(vec2 w, float cell, float r, float density, vec2 drift) {
 	return on * clamp((r - d) / soft + 0.5, 0.0, 1.0) * tw;
 }
 
+// Night: motes of light hanging in the water, a bright core in a soft halo,
+// each wandering a little round its place and breathing; `tint` 0..1 picks
+// its colour (most warm white, some sea green).
+float motes(vec2 w, float cell, float r, float density, vec2 drift, float px, out float tint) {
+	vec2 g = (w + drift) / cell;
+	vec2 id = floor(g);
+	float on = step(hash(id + 5.0), density);
+	vec2 o = hash2(id) * 0.6 + 0.2 + 0.09 * vec2(sin(TIME * 0.31 + hash(id + 3.0) * 6.28), cos(TIME * 0.23 + hash(id + 4.0) * 6.28));
+	float d = length(g - id - o) * cell;
+	float tw = 0.5 + 0.5 * sin(TIME * (0.35 + hash(id) * 0.8) + hash(id + 2.0) * 6.28);
+	tint = hash(id + 7.7);
+	float rr = max(r, px * 0.8);
+	return on * (exp(-d * d / (rr * rr)) + 0.3 * exp(-d / (rr * 2.6))) * (0.35 + 0.65 * tw) * (r / rr);
+}
+
 // Smooth (cubic B-spline) lookup of a low-resolution field from four
 // bilinear taps; fields are uploaded at simulation resolution and smoothed
 // here, so the CPU never resamples them.
@@ -249,6 +270,11 @@ void vertex() {
 
 void fragment() {
 	float px = max(fwidth(v_world.x), 1e-4); // world units per pixel
+	// What the night look is built from, taken as the day's is worked out.
+	float nk_ghost = 0.0, nk_hue = 0.0, nk_grid = 0.0, nk_sweep = 0.0, nk_field = 0.0;
+	float nk_rock = 0.0, nk_rline = 0.0, nk_coral = 0.0, nk_cline = 0.0, nk_polyp = 0.0;
+	float nk_shim = 0.0, nk_frost = 0.0, nk_fizz = 0.0;
+	vec3 nk_coral_col = vec3(0.0);
 	// The pointer's ripples bend the water (refraction) and catch the light.
 	vec3 rf = ripple_count > 0 ? ripple_field(v_world, px) : vec3(0.0);
 	vec3 wk = wake_count > 0 ? wake_field(v_world, px) : vec3(0.0);
@@ -284,6 +310,8 @@ void fragment() {
 		c += vec3(0.03, 0.02, -0.01) * clamp(l * 1.5, 0.0, 1.0) * look2;
 		// The world below the focal plane, slower than the dish (parallax).
 		float ghosts = wfx.r;
+		nk_ghost = ghosts * look2;
+		nk_hue = hue;
 		c = mix(c, mix(vec3(0.5, 0.74, 0.82), vec3(0.7, 0.62, 0.86), hue), ghosts * 0.2 * look2);
 		// Caustics, strongest under the lamp.
 		float cau = wfx.g;
@@ -308,15 +336,18 @@ void fragment() {
 		c = mix(c, vec3(1.0, 0.86, 0.68), warm * 0.2);
 		float shimmer = noise(vec2(world.x * 0.03, world.y * 0.008 + TIME * 0.6));
 		c = mix(c, vec3(1.0, 0.93, 0.82), warm * smoothstep(0.62, 0.9, shimmer) * 0.3);
+		nk_shim = smoothstep(0.55, 0.9, shimmer);
 	}
 	if (cold > 0.003) {
 		c = mix(c, vec3(0.84, 0.93, 1.0), cold * 0.24);
 		float frost = pow(clamp(1.0 - abs(noise(world * 0.05) - noise(world * 0.05 + 3.3)) * 6.0, 0.0, 1.0), 8.0);
 		c = mix(c, vec3(1.0), cold * frost * 0.35);
+		nk_frost = frost;
 	}
 	if (sour > 0.003) {
 		c = mix(c, vec3(0.9, 0.95, 0.68), sour * 0.22);
-		c = mix(c, vec3(0.97, 0.99, 0.82), sour * bokeh(world + vec2(0.0, TIME * 26.0), 34.0, 3.0, 0.3, vec2(0.0)) * 0.6);
+		nk_fizz = bokeh(world + vec2(0.0, TIME * 26.0), 34.0, 3.0, 0.3, vec2(0.0));
+		c = mix(c, vec3(0.97, 0.99, 0.82), sour * nk_fizz * 0.6);
 	}
 
 	// Near particles: big out-of-focus motes drifting past the lens.
@@ -333,7 +364,9 @@ void fragment() {
 		float rock_cov = clamp((rock - 0.5) / (fwidth(rock) + 1e-4) + 0.5, 0.0, 1.0) * in_dish;
 		vec3 stone = mix(vec3(0.95, 0.93, 0.89), vec3(0.9, 0.92, 0.93), noise(ap * 3.0));
 		c = mix(c, stone, rock_cov * 0.8);
-		c = mix(c, vec3(0.68, 0.74, 0.78), clamp(0.6 - abs(rock - 0.5) / (fwidth(rock) + 1e-4), 0.0, 1.0) * in_dish * 0.55);
+		nk_rock = rock_cov;
+		nk_rline = clamp(0.6 - abs(rock - 0.5) / (fwidth(rock) + 1e-4), 0.0, 1.0) * in_dish;
+		c = mix(c, vec3(0.68, 0.74, 0.78), nk_rline * 0.55);
 		// Coral: branching pastel growths at the rock's edge.
 		float cn = fbm(ap * 2.6 + 11.0);
 		float coral = cn + 0.42 - band * 1.2 + 0.1 * sin(ap.x * 9.0);
@@ -341,11 +374,15 @@ void fragment() {
 		vec3 coral_col = mix(vec3(0.98, 0.7, 0.66), vec3(0.98, 0.82, 0.55), noise(ap * 0.7 + 5.0));
 		coral_col = mix(coral_col, vec3(0.62, 0.84, 0.6), step(0.72, noise(ap * 0.5 + 9.0)));
 		c = mix(c, coral_col, coral_cov * 0.75);
-		c = mix(c, coral_col * 0.8, clamp(0.6 - abs(coral - 0.62) / (fwidth(coral) + 1e-4), 0.0, 1.0) * in_dish * 0.8);
+		nk_coral = coral_cov;
+		nk_coral_col = coral_col;
+		nk_cline = clamp(0.6 - abs(coral - 0.62) / (fwidth(coral) + 1e-4), 0.0, 1.0) * in_dish;
+		c = mix(c, coral_col * 0.8, nk_cline * 0.8);
 		// Polyp dots on the coral.
 		vec2 pg = world / 7.0;
 		float pd = length(pg - floor(pg) - 0.5) * 7.0;
-		c = mix(c, mix(coral_col, vec3(1.0), 0.5), coral_cov * clamp(1.2 - pd / max(px, 0.4), 0.0, 1.0) * step(0.55, hash(floor(pg))) * 0.7);
+		nk_polyp = coral_cov * clamp(1.2 - pd / max(px, 0.4), 0.0, 1.0) * step(0.55, hash(floor(pg)));
+		c = mix(c, mix(coral_col, vec3(1.0), 0.5), nk_polyp * 0.7);
 	}
 
 	// The instrument: a measuring grid projected onto the dish floor (50 µm,
@@ -384,6 +421,9 @@ void fragment() {
 				+ (tick * 0.32 + tick_ring * 0.16) * (1.0 + beam) + fine * 0.16;
 		grid *= (1.0 - analysis) * (1.0 - 0.8 * max(species_amount, pop_amount)) * in_dish;
 		c = mix(c, HOLO, clamp(grid, 0.0, 0.85));
+		nk_grid = grid;
+		nk_field = field_in;
+		nk_sweep = exp(-sweep * 14.0);
 		// The sweep's faint wedge and the field's glass-like tint.
 		c = mix(c, vec3(0.86, 0.97, 1.0), (exp(-sweep * 14.0) * 0.06 + field_in * 0.05) * in_dish * (1.0 - analysis));
 	}
@@ -520,12 +560,73 @@ void fragment() {
 		// A bevel along the stage's edge.
 		outside = mix(outside, vec3(0.99, 1.0, 1.0), hair(box + 6.0, px, 2.0) * 0.8 * smoothstep(-H, H, -q.y - q.x * 0.3));
 	}
+	vec3 nc = c;
+	if (night > 0.0) {
+		// ----------------------------------------------------- night water
+		// A warm deep black, a slow volume drifting through it, deeper
+		// toward the glass; where light falls (the light field), a dim warm
+		// pool; dissolved nutrient a faint green.
+		vec3 nw = vec3(0.034, 0.029, 0.026);
+		float vol = fbm(world * 0.0016 + vec2(TIME * 0.007, -TIME * 0.005));
+		nw += vec3(0.026, 0.02, 0.015) * vol;
+		nw *= 1.0 - 0.4 * smoothstep(0.5, 1.0, rr);
+		nw += vec3(0.07, 0.048, 0.026) * clamp(l, 0.0, 1.0) * 0.55;
+		nw += vec3(0.012, 0.036, 0.024) * smoothstep(0.05, 0.6, n);
+		// The world below the focal plane: big soft shapes, faintly lit.
+		nw += mix(vec3(0.03, 0.075, 0.068), vec3(0.06, 0.045, 0.085), nk_hue) * nk_ghost * 0.55;
+		// Motes of light at two depths (parallax), most warm white, some
+		// sea green; tiny far ones, larger near ones slowly passing.
+		float tf, tn;
+		float mf = motes(world - cam_pos * 0.25, 46.0, 1.3, 0.34, TIME * vec2(2.2, -1.1), px, tf);
+		float mn = motes(world + cam_pos * 0.35, 150.0, 3.2, 0.3, TIME * vec2(-3.5, 1.6), px, tn);
+		vec3 warm_mote = vec3(1.0, 0.86, 0.62);
+		vec3 sea_mote = vec3(0.45, 1.0, 0.82);
+		nw += mix(warm_mote, sea_mote, step(0.7, tf)) * mf * 0.5;
+		nw += mix(warm_mote, sea_mote, step(0.62, tn)) * mn * 0.42;
+		// The vent's water breathes a warm glow, shimmering as it rises; the
+		// cold water glints; the acid fizzes a dim yellow-green.
+		vec4 env_n = field4(env_tex, uv);
+		float warm_n = smoothstep(18.0, 34.0, env_n.r);
+		float cold_n = smoothstep(9.0, 2.0, env_n.r);
+		float sour_n = smoothstep(0.15, 0.75, env_n.g);
+		// (A halo, not a floor: the square root lifts a spring's faint
+		// edge, the cap keeps a wide hot zone from turning the water amber.)
+		float halo = sqrt(warm_n);
+		nw += vec3(0.5, 0.2, 0.12) * halo * (0.17 + 0.05 * sin(TIME * 0.9 + world.y * 0.01));
+		nw += vec3(0.9, 0.55, 0.32) * halo * nk_shim * 0.08;
+		nw += vec3(0.4, 0.62, 0.7) * cold_n * nk_frost * 0.3;
+		nw += vec3(0.4, 0.5, 0.1) * sour_n * (0.07 + nk_fizz * 0.35);
+		// Rock: a dark silhouette with a dim rim; coral glowing in its own
+		// colours, its polyps the brightest points.
+		nw = mix(nw, vec3(0.07, 0.063, 0.057), nk_rock * 0.92);
+		nw = mix(nw, vec3(0.2, 0.18, 0.16), nk_rline * 0.45);
+		nw = mix(nw, nk_coral_col * 0.2, nk_coral * 0.85);
+		nw = mix(nw, nk_coral_col * 0.62, nk_cline * 0.75);
+		nw += nk_coral_col * nk_polyp * 0.9;
+		// The instrument: the grid a faint holo line, the sweep a breath.
+		nw = mix(nw, HOLO * 0.95, clamp(nk_grid * 0.6, 0.0, 0.6));
+		nw += HOLO * (nk_sweep * 0.035 + nk_field * 0.04) * (1.0 - analysis);
+		// The hand's wake and the ripples stir the water alight.
+		nw += vec3(0.3, 0.9, 0.72) * clamp(wk.z, 0.0, 1.0) * 0.4;
+		nw += vec3(0.3, 0.85, 0.72) * max(rf.z, 0.0) * 0.03;
+		// View filters and the analysis maps: the day's picture, turned.
+		float maps = clamp(max(max(analysis, species_amount), max(pop_amount, env_layer > 0 ? env_amount : 0.0)), 0.0, 1.0);
+		nw = mix(nw, night_ui(c), maps * in_dish);
+		// The stage: dark enamel, nearly neutral (warm only a breath).
+		vec3 so = night_ui(outside);
+		so = mix(vec3(dot(so, vec3(0.3, 0.55, 0.15))), so, 0.45) * 0.78;
+		nc = mix(so, nw, in_dish);
+	}
 	c = mix(outside, c, in_dish);
 	float ang = atan(world.y - dish_center.y, world.x - dish_center.x);
 	float glint = pow(0.5 + 0.5 * cos(ang + 2.3), 3.0);
 	c = mix(c, vec3(0.72, 0.82, 0.87), exp(-abs(rd - dish_radius + 10.0) * 0.3) * 0.5);
 	c = mix(c, vec3(1.0), exp(-abs(rd - dish_radius) * 0.22) * (0.55 + 0.45 * glint));
 	c = mix(c, vec3(1.0), exp(-abs(rd - dish_radius + 22.0) * 0.12) * glint * 0.35);
+	// (Night: the rim a thin warm glint.)
+	nc = mix(nc, vec3(0.2, 0.18, 0.16), exp(-abs(rd - dish_radius + 10.0) * 0.3) * 0.5);
+	nc = mix(nc, vec3(0.78, 0.7, 0.6), exp(-abs(rd - dish_radius) * 0.22) * (0.25 + 0.5 * glint));
+	nc = mix(nc, vec3(0.9, 0.8, 0.66), exp(-abs(rd - dish_radius + 22.0) * 0.12) * glint * 0.2);
 	// Two spring clips holding the dish, lying across the glass edge (only
 	// worked out near the rim, where they can be).
 	for (int ci = 0; ci < (rd > dish_radius - 120.0 && rd < dish_radius + 480.0 ? 2 : 0); ci++) {
@@ -537,21 +638,28 @@ void fragment() {
 		float clip = sd_round_box(m, vec2(240.0, 46.0), 22.0);
 		float shadow = 1.0 - smoothstep(0.0, 26.0, sd_round_box(m - vec2(0.0, 10.0), vec2(240.0, 46.0), 22.0));
 		c *= 1.0 - 0.12 * shadow * step(0.0, clip);
+		nc *= 1.0 - 0.3 * shadow * step(0.0, clip);
 		vec3 steel = mix(vec3(0.8, 0.84, 0.88), vec3(0.97, 0.98, 0.99), smoothstep(46.0, -46.0, m.y));
 		steel += (noise(vec2(lq.x * 0.9, lq.y * 0.01)) - 0.5) * 0.04;
 		float inside_c = clamp(0.5 - clip / px, 0.0, 1.0);
 		c = mix(c, steel, inside_c);
 		c = mix(c, vec3(0.55, 0.62, 0.68), hair(clip, px, 1.2) * 0.7);
+		nc = mix(nc, night_ui(steel), inside_c);
+		nc = mix(nc, vec3(0.5, 0.45, 0.4), hair(clip, px, 1.2) * 0.7);
 		// The screw that holds it.
 		vec2 sm = m - vec2(110.0, 0.0);
 		float sr = length(sm);
 		c = mix(c, vec3(0.7, 0.75, 0.8), (1.0 - smoothstep(24.0, 26.0, sr)) * inside_c);
 		c = mix(c, vec3(0.97, 0.98, 0.99), (1.0 - smoothstep(19.0, 21.0, sr)) * inside_c);
+		nc = mix(nc, vec3(0.3, 0.27, 0.24), (1.0 - smoothstep(24.0, 26.0, sr)) * inside_c);
+		nc = mix(nc, vec3(0.13, 0.115, 0.1), (1.0 - smoothstep(19.0, 21.0, sr)) * inside_c);
 		float slot = max(abs(dot(sm, vec2(0.7071, 0.7071))) - 3.0, abs(dot(sm, vec2(-0.7071, 0.7071))) - 15.0);
 		c = mix(c, vec3(0.45, 0.52, 0.58), (1.0 - smoothstep(0.0, 1.2, slot)) * inside_c);
+		nc = mix(nc, vec3(0.42, 0.38, 0.33), (1.0 - smoothstep(0.0, 1.2, slot)) * inside_c);
 	}
 	// Ripple crests catch the lamp (a little over 1: they bloom), troughs dim.
 	c *= 1.0 - 0.018 * max(-rf.z, 0.0);
 	c += vec3(0.7, 0.93, 1.0) * max(rf.z, 0.0) * 0.016 * in_dish;
-	COLOR = vec4(pow(c, vec3(2.2)), 1.0);
+	c = mix(c, nc, night);
+	COLOR = vec4(pow(max(c, vec3(0.0)), vec3(2.2)), 1.0);
 }

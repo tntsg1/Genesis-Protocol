@@ -1,4 +1,6 @@
 shader_type canvas_item;
+
+#include "res://shaders/night.gdshaderinc"
 // The water's chemical signals as a haze under the cells
 // (scripts/dish_marks.gd): R = signal A, G = signal B, raw concentration on
 // the simulation's grid. Softened with a few taps (the grid is coarse), faint
@@ -28,5 +30,7 @@ void fragment() {
 	vec3 c = t > 0.0 ? (col_a.rgb * a + col_b.rgb * b) / t : col_a.rgb;
 	// A brighter rim where the haze is thickest (the front of a call).
 	float rim = smoothstep(0.25, 0.6, max(s.r, s.g)) * 0.18;
-	COLOR = vec4(mix(c, vec3(1.0), rim), clamp(t + rim * 0.5, 0.0, 0.42));
+	// (Night: on the dark water a light haze is a glow; half as much reads
+	// the same, the rim warm.)
+	COLOR = vec4(mix(c, mix(vec3(1.0), vec3(1.0, 0.9, 0.75), night), rim), clamp(t + rim * 0.5, 0.0, 0.42) * mix(1.0, 0.45, night));
 }

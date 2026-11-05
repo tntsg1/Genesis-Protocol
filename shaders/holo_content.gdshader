@@ -8,6 +8,8 @@
 // fringes; lines and fills (a white texture) are unaffected.
 shader_type canvas_item;
 
+#include "res://shaders/night.gdshaderinc"
+
 uniform float appear = 1.0;
 uniform float glitch = 0.0;
 uniform vec2 shift = vec2(0.0);
@@ -38,6 +40,10 @@ float hash1(float n) {
 
 void fragment() {
 	vec3 rgb = COLOR.rgb;
+	// Night: the content's colours to the night palette (COLOR is linear).
+	if (night > 0.0) {
+		rgb = mix(rgb, night_ui_lin(rgb), night);
+	}
 	float a = COLOR.a;
 	float split = glitch + (1.0 - appear) * 2.5;
 	if (split > 0.01) {

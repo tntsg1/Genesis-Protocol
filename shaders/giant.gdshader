@@ -1,4 +1,6 @@
 shader_type canvas_item;
+
+#include "res://shaders/night.gdshaderinc"
 // One giant virus (巨毒囊), drawn from distance fields: a six-sided capsid seen
 // through a coat of fine fibres, the genome packed in the middle, and the
 // star-shaped gate on one corner, where it opens inside a cell.
@@ -110,6 +112,11 @@ void fragment() {
 			o = over(o, rider, fill(bd, k) * 0.9);
 			o = over(o, ink, fill(abs(bd) - w * 0.3, k) * 0.4);
 		}
+	}
+	if (night > 0.0) {
+		// Night (深海荧光): lit from within in its own colour.
+		o.rgb = mix(o.rgb, nt_lin(night_glow(nt_srgb(max(o.rgb, vec3(0.0))), nt_srgb(max(vec3(0.62, 0.5, 0.86), vec3(0.0))))), night);
+		o.a = mix(o.a, min(1.0, o.a * 1.25), night);
 	}
 	COLOR = vec4(o.rgb, o.a * alpha);
 }

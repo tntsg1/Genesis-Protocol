@@ -6,6 +6,8 @@
 shader_type canvas_item;
 render_mode unshaded;
 
+#include "res://shaders/night.gdshaderinc"
+
 uniform sampler2D screen_tex : hint_screen_texture, filter_linear_mipmap;
 uniform vec2 size = vec2(880.0, 600.0);
 uniform float radius = 8.0;
@@ -29,9 +31,10 @@ void fragment() {
 	float inside = clamp(0.5 - d, 0.0, 1.0);
 
 	vec3 behind = textureLod(screen_tex, SCREEN_UV, 4.5).rgb;
-	vec3 col = mix(behind, base.rgb, base.a);
+	// (Night: warm deep glass instead of slate blue.)
+	vec3 col = mix(behind, mix(base.rgb, vec3(0.012, 0.01, 0.009), night), base.a);
 	// A faint cool gradient, lighter at the top: glass under a lamp.
-	col += vec3(0.02, 0.035, 0.04) * (1.0 - UV.y);
+	col += mix(vec3(0.02, 0.035, 0.04), vec3(0.016, 0.013, 0.011), night) * (1.0 - UV.y);
 
 	// The darkfield light under the specimen.
 	vec2 f = (p - focus) / max(focus_r, 1.0);
@@ -52,7 +55,7 @@ void fragment() {
 	col *= 1.0 - 0.28 * smoothstep(-18.0, 0.0, d);
 	float rim = clamp(1.0 - abs(d + 1.2), 0.0, 1.0);
 	float top = smoothstep(h.y * 1.1, 0.0, p.y);
-	col = mix(col, vec3(0.62, 0.9, 0.94), rim * (0.18 + 0.5 * top));
+	col = mix(col, mix(vec3(0.62, 0.9, 0.94), vec3(0.55, 0.5, 0.44), night), rim * (0.18 + 0.5 * top));
 	float rim2 = clamp(1.0 - abs(d + 3.0) * 0.8, 0.0, 1.0);
 	col = mix(col, vec3(0.0, 0.02, 0.03), rim2 * 0.35 * (1.0 - top));
 

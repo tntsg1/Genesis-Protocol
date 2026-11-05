@@ -1,4 +1,6 @@
 shader_type canvas_item;
+
+#include "res://shaders/night.gdshaderinc"
 // A colony's outer jelly (level 21): the distance to the blueprint's outline
 // comes baked in `skin` (Colony.bake_skin), so the jelly hugs the shape the
 // player built. Clear in the middle, denser and bright towards the skin, as
@@ -66,6 +68,11 @@ void fragment() {
 	if (fade > 0.0) {
 		float holes = noise(v_q * 7.0 + ph) * 0.65 + noise(v_q * 17.0 - ph) * 0.35;
 		o.a *= smoothstep(fade * 1.15 - 0.08, fade * 1.15 + 0.02, holes) * (1.0 - fade * fade);
+	}
+	if (night > 0.0) {
+		// Night (深海荧光): lit from within in its own colour.
+		o.rgb = mix(o.rgb, nt_lin(night_glow(nt_srgb(max(o.rgb, vec3(0.0))), nt_srgb(max(tint, vec3(0.0))))), night);
+		o.a = mix(o.a, min(1.0, o.a * 1.6), night);
 	}
 	COLOR = o;
 }

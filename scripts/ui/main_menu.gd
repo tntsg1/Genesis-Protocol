@@ -45,6 +45,7 @@ func setup(showcase: Node2D) -> void:
 	var sh := Shader.new()
 	sh.code = """
 shader_type canvas_item;
+#include "res://shaders/night.gdshaderinc"
 uniform float amount = 1.0;
 uniform float front = -1.0;
 void fragment() {
@@ -55,6 +56,7 @@ void fragment() {
 		a *= smoothstep(front - 0.02, front + 0.12, x);
 	}
 	COLOR = vec4(0.975, 0.99, 1.0, a * amount);
+	COLOR.rgb = mix(COLOR.rgb, night_ui_lin(COLOR.rgb), night); // (night: dark glass)
 }
 """
 	var wm := ShaderMaterial.new()

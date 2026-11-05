@@ -11,6 +11,8 @@
 shader_type canvas_item;
 render_mode unshaded;
 
+#include "res://shaders/night.gdshaderinc"
+
 uniform sampler2D screen_tex : hint_screen_texture, filter_linear_mipmap;
 uniform float amount = 1.0;
 // The sharp middle: an ellipse in screen units (x stretched by the aspect).
@@ -52,7 +54,8 @@ void fragment() {
 	}
 	// Cool, slightly dimmer edges.
 	float edge = smoothstep(focus_r * 0.6, focus_r + focus_soft * 1.3, r);
-	col *= mix(vec3(1.0), vec3(0.83, 0.9, 0.96), edge * (0.35 + 0.65 * amount));
+	// (At night: deeper toward the edges, neutral, the dark around a lamp.)
+	col *= mix(vec3(1.0), mix(vec3(0.83, 0.9, 0.96), vec3(0.62, 0.6, 0.6), night), edge * (0.35 + 0.65 * amount));
 	// Highlight roll-off: the open water under the lamp no longer clips to
 	// flat white (it read as overexposed); 0.7..1 eases into 0.7..0.86 (linear)
 	// with a faint cool tint, and what blooms above 1 keeps its headroom.

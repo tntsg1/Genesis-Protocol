@@ -8,6 +8,8 @@
 shader_type canvas_item;
 render_mode unshaded;
 
+#include "res://shaders/night.gdshaderinc"
+
 uniform sampler2D screen_tex : hint_screen_texture, filter_linear_mipmap;
 uniform vec2 size = vec2(300.0, 200.0);
 uniform float radius = 10.0;
@@ -32,8 +34,13 @@ void fragment() {
 
 	vec3 behind = textureLod(screen_tex, SCREEN_UV, blur).rgb;
 	behind = mix(behind, vec3(dot(behind, vec3(0.299, 0.587, 0.114))), desat);
-	vec3 col = mix(behind, tint.rgb, tint.a);
-	col = mix(col, vec3(1.0), 0.06 * (1.0 - UV.y));
+	// Night (night.gdshaderinc): dark warm glass, warm white light, the
+	// accent as it is (its uniforms are linear colours here).
+	vec3 tint_c = mix(tint.rgb, night_ui_lin(tint.rgb), night);
+	vec3 edge_c = mix(edge.rgb, night_ui_lin(edge.rgb), night);
+	vec3 white = mix(vec3(1.0), vec3(0.62, 0.55, 0.46), night);
+	vec3 col = mix(behind, tint_c, tint.a);
+	col = mix(col, white, 0.06 * (1.0 - UV.y));
 
 	// How far round the frame this pixel is (0 at the top-left corner,
 	// clockwise), for the trace.
@@ -45,9 +52,9 @@ void fragment() {
 	// Hairline frame (1 px), brighter when highlighted; the top edge lit.
 	float frame = clamp(1.0 - abs(d + 0.6), 0.0, 1.0);
 	float lit = smoothstep(h.y * 1.2, 0.0, p.y);
-	vec3 frame_col = mix(edge.rgb, accent.rgb, highlight);
+	vec3 frame_col = mix(edge_c, accent.rgb, highlight);
 	col = mix(col, frame_col, frame * mix(edge.a, 0.9, highlight) * traced * (1.0 - 0.5 * lit));
-	col = mix(col, vec3(1.0), clamp(1.0 - abs(d + 1.7), 0.0, 1.0) * lit * 0.85 * traced);
+	col = mix(col, white, clamp(1.0 - abs(d + 1.7), 0.0, 1.0) * lit * 0.85 * traced);
 	col = mix(col, accent.rgb, frame * head);
 	// Accent corner brackets, inset 4 px, growing in.
 	float bl = bracket * bracket_in;
@@ -64,7 +71,7 @@ void fragment() {
 	float y = scan * (size.y + 24.0) - 12.0;
 	float reveal = smoothstep(y + 8.0, y - 8.0, p.y);
 	float line = exp(-abs(p.y - y) * 0.3) * step(scan, 0.999);
-	col = mix(col, mix(accent.rgb, vec3(1.0), 0.35), line * 0.7);
+	col = mix(col, mix(accent.rgb, white, 0.35), line * 0.7);
 	// Keep the node's modulate: writing COLOR outright would drop it.
 	COLOR = vec4(col, inside * max(max(reveal, line * 0.8), frame * traced) * COLOR.a);
 }

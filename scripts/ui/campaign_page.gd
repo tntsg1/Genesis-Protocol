@@ -55,13 +55,14 @@ func setup(showcase: Node2D) -> void:
 	wash.mouse_filter = Control.MOUSE_FILTER_STOP
 	var sh := Shader.new()
 	sh.code = """shader_type canvas_item;
+#include "res://shaders/night.gdshaderinc"
 uniform float front = 2.0;
 void fragment() {
 	float g = SCREEN_UV.y - front;
 	float a = 0.9 * (1.0 - smoothstep(-0.004, 0.0, g));
 	float band = exp(-abs(g) * 70.0) * step(g, 0.0);
 	vec3 col = mix(vec3(0.972, 0.986, 0.995), vec3(0.78, 0.96, 1.0), band * 0.6);
-	COLOR = vec4(col, max(a, band * 0.3));
+	COLOR = vec4(mix(col, night_ui_lin(col), night), max(a, band * 0.3));
 }"""
 	wash_mat = ShaderMaterial.new()
 	wash_mat.shader = sh

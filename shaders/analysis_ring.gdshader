@@ -5,6 +5,8 @@
 shader_type canvas_item;
 render_mode blend_mix, unshaded;
 
+#include "res://shaders/night.gdshaderinc"
+
 uniform float fade = 1.0;
 // Vision rings only read when zoomed in; far out they would pile up.
 uniform float vision = 1.0;
@@ -28,5 +30,6 @@ void fragment() {
 	float b = v_custom.y;
 	float body = clamp(1.0 - abs(r - b) / max(px * 1.2, 1e-4), 0.0, 1.0);
 	float a = (ring * 0.4 * vision + body * 0.85) * fade;
+	ink = mix(ink, night_ui(ink), night); // (night: light lines on the dark water)
 	COLOR = vec4(pow(ink, vec3(2.2)), clamp(a, 0.0, 1.0));
 }

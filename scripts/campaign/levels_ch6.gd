@@ -28,11 +28,11 @@ const DAWN_COLOR := Color(0.42, 0.8, 0.5)
 # 硫泉游丝 as a level places it (DECISIONS Q213: the player's look, these numbers).
 const SULFUR := {name = "硫泉游丝", color = SULFUR_COLOR, diet = 2, radius = 5.5, speed = 1.8, vision = 2.0, armor = 1.0,
 	attack = 1.0, fertility = 2.6, efficiency = 3.0, neural = 3.0, lifespan = 120.0, cohesion = 0.3, temp_opt = 22.0, temp_tol = 3.0,
-	resp = 1, reseed = false, organ_mask = 0}
+	resp = 1, reseed = false, organ_mask = 2048} # (硫化酶: Organs.LIST 11, so it is drawn with it)
 # 晨光丝 as a level places it.
 const DAWN := {name = "晨光丝", color = DAWN_COLOR, diet = 3, radius = 5.0, speed = 1.6, vision = 2.0, armor = 1.0,
 	attack = 1.0, fertility = 2.8, efficiency = 3.0, neural = 3.0, lifespan = 120.0, cohesion = 0.2, temp_opt = 12.0, temp_tol = 3.0,
-	speed_mult = 0.6, resp = 0}
+	speed_mult = 0.6, resp = 0, organ_mask = 4096} # (光合膜: Organs.LIST 12)
 
 
 # 硫泉游丝 already living at the three springs (25 / 15 at each).

@@ -1,4 +1,6 @@
 shader_type canvas_item;
+
+#include "res://shaders/night.gdshaderinc"
 // Chapter 6 boss (6-5): the giant foraminiferan and its pseudopod net
 // (SimCore net field, 0..1 per 16 µm cell). From its many-chambered spiral
 // shell, fine pseudopods radiate and branch and join into a web; granules
@@ -137,6 +139,11 @@ void fragment() {
 		sc = mix(sc, SHELL_EDGE * 1.1, pores * 0.5);
 		vec4 shell = vec4(sc, max(inside * 0.96, edge));
 		col = mix(col, shell, shell.a);
+	}
+	if (night > 0.0) {
+		// Night (深海荧光): lit from within in its own colour.
+		col.rgb = mix(col.rgb, nt_lin(night_glow(nt_srgb(max(col.rgb, vec3(0.0))), nt_srgb(max(STRAND, vec3(0.0))))), night);
+		col.a = mix(col.a, min(1.0, col.a * 1.25), night);
 	}
 	col.a *= amount;
 	COLOR = col;

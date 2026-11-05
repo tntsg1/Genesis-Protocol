@@ -37,6 +37,12 @@
 shader_type canvas_item;
 render_mode blend_mix, unshaded;
 
+// Night (深海荧光, night.gdshaderinc): every body lit from within in its own
+// colour (night_glow: the fill a soft translucent light, the membrane and the
+// details brighter, blooming); shells dim; algae a green glow; light-eaters
+// (the 光合膜 organ) with a warm halo round them.
+#include "res://shaders/night.gdshaderinc"
+
 // Analysis mode: organisms step back (lighter) so the diagram reads.
 uniform float analysis = 0.0;
 // The life designer draws its own big nucleus with chromosomes on top.
@@ -1163,6 +1169,27 @@ void fragment() {
 		o.rgb = mix(o.rgb, mix(o.rgb, v_color.rgb * 0.82, 0.45), f * v_match);
 		o.a = mix(o.a, min(1.0, o.a * 1.2), f * v_match);
 		glow += 0.12 * f * v_match * step(0.01, o.a);
+	}
+	if (night > 0.0 && o.a > 0.0) {
+		bool algae = kind > 7.5 && kind < 8.5;
+		vec3 nrgb = night_glow(o.rgb, algae ? vec3(0.55, 0.85, 0.4) : base);
+		float na = min(1.0, o.a * 1.3);
+		if (kind > 8.5) {
+			nrgb *= 0.5;
+			na = o.a * 0.7;
+		}
+		o.rgb = mix(o.rgb, nrgb, night);
+		o.a = mix(o.a, na, night);
+		glow += 0.5 * night;
+	}
+	if (night > 0.0 && kind < 1.0 && ((int(v_organs + 0.5) >> 12) & 1) == 1) {
+		// Light-eaters: a warm halo under the body.
+		float r = length(ps);
+		float ha = exp(-max(r - 0.3, 0.0) / 0.13) * 0.42 * (1.0 - smoothstep(0.8, 1.0, r)) * (1.0 - o.a) * night;
+		vec3 hc = vec3(1.0, 0.66, 0.36);
+		float oa = o.a + ha;
+		o.rgb = (o.rgb * o.a + hc * ha) / max(oa, 1e-4);
+		o.a = oa;
 	}
 	vec3 lin = pow(o.rgb, vec3(2.2));
 	lin *= 1.0 + glow * 0.6; // above 1: blooms

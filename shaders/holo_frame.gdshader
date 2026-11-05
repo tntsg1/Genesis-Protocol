@@ -10,6 +10,8 @@
 shader_type canvas_item;
 render_mode unshaded;
 
+#include "res://shaders/night.gdshaderinc"
+
 uniform sampler2D screen_tex : hint_screen_texture, filter_linear_mipmap;
 uniform vec2 size = vec2(300.0, 200.0);
 uniform float margin = 64.0;
@@ -70,7 +72,11 @@ void fragment() {
 	behind /= 6.0;
 	vec2 rel = p / max(size, vec2(1.0));
 	float lift = haze.a * mix(1.12, 0.78, clamp(length(rel * vec2(0.7, 1.0)), 0.0, 1.0)) + 0.1 * highlight;
-	vec3 col = mix(behind, haze.rgb, clamp(lift, 0.0, 1.0));
+	// Night (night.gdshaderinc): the haze a dark warm smoke, a touch denser
+	// so the warm white ink reads over the glowing water.
+	vec3 haze_c = mix(haze.rgb, night_ui_lin(haze.rgb), night);
+	lift = mix(lift, min(lift * 1.25 + 0.08, 0.95), night);
+	vec3 col = mix(behind, haze_c, clamp(lift, 0.0, 1.0));
 	float a = fog;
 	// Scanlines drifting down through the haze.
 	float sl = 0.5 + 0.5 * sin(FRAGCOORD.y * 2.1 - TIME * 6.0);
@@ -97,7 +103,7 @@ void fragment() {
 	vec2 cq = size - p;
 	float tick = (step(abs(cq.x - 2.0), 0.7) * step(0.0, cq.y) * step(cq.y, 9.0) + step(abs(cq.y - 2.0), 0.7) * step(0.0, cq.x) * step(cq.x, 9.0)) * haze_in;
 
-	vec3 lit = mix(accent.rgb, vec3(1.0), 0.35);
+	vec3 lit = mix(accent.rgb, mix(vec3(1.0), vec3(1.0, 0.92, 0.8), night), 0.35);
 	col = mix(col, accent.rgb, glow * 0.6);
 	a = max(a, glow * 0.7);
 	col = mix(col, accent.rgb, max(rule * 0.85, tab));
@@ -108,7 +114,7 @@ void fragment() {
 	a = max(a, diamond);
 	col = mix(col, accent.rgb, rail * 0.5);
 	a = max(a, rail * 0.5);
-	col = mix(col, ink.rgb, tick * 0.6);
+	col = mix(col, mix(ink.rgb, night_ui_lin(ink.rgb), night), tick * 0.6);
 	a = max(a, tick * 0.6);
 	// The change flash washes the haze.
 	col = mix(col, accent.rgb, flash * 0.18 * fog);
