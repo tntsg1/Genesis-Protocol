@@ -1047,7 +1047,7 @@ const CH5 := [
 const CHAPTERS := [["第一章 · 单细胞篇"], ["第二章 · 捕食篇"], ["第三章 · 群居篇"], ["第四章 · 噬体篇"], ["第五章 · 多细胞篇"],
 	["第六章 · 播种篇"], ["第七章 · 寒夜篇"], ["第八章 · 腐土篇"], ["第九章 · 演化篇"], ["第十章 · 终章"]]
 static var ALL: Array = CH1 + CH2 + CH3 + CH4 + CH5 + LevelsCh6.LEVELS + LevelsCh7.LEVELS
-const UNFINISHED := [6] # chapters with more levels still to come: no "chapter complete" yet
+const UNFINISHED := [] # chapters with more levels still to come: no "chapter complete" yet
 
 
 static func by_id(id: String) -> Dictionary:

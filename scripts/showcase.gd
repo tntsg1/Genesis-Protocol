@@ -898,6 +898,13 @@ func start_level(l: Dictionary) -> void:
 		add_child(a)
 		a.finished.connect(func() -> void: start_level(l))
 		return
+	# Chapter 7: the passage to planet two before 7-1 (scripts/ui/arrival2.gd).
+	if l.get("arrival2", false) and not CampaignSave.seen("arrival_7") and not testing:
+		CampaignSave.mark_seen("arrival_7")
+		var a2: CanvasLayer = preload("res://scripts/ui/arrival2.gd").new()
+		add_child(a2)
+		a2.finished.connect(func() -> void: start_level(l))
+		return
 	# From the campaign page: the frame freezes, a lens opens at the station
 	# and grows over the screen; under it the level's dish is already there,
 	# far and soft, and racks into focus as the camera comes down to the
