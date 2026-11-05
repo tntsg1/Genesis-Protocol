@@ -190,6 +190,56 @@ const STEPS := {
 按 {analysis} 再按 {env_layer}，能看到哪里的氧气最浓。", ring = "dock:iron", wait = "used:iron"},
 			"右上角能看到网的覆盖面积。压到 12% 以下以后，还要再坚持 30 秒。"],
 	},
+	"7-1": {
+		design = ["第二颗星球的冰下很冷，只有左边那块被冰墙围着的暖水区能让细胞分裂，暖水区只有朝右的一扇门。
+
+这关要教你的生命记住回家的路。",
+			{text = "在器官槽里装上「记忆泡」。", ring = "organ:memory", wait = "organ:memory", goal = "安装「记忆泡」。"},
+			{text = "打开「行为规则」，进入「高级编辑」。", ring = "mode_adv", wait = "mode:advanced", goal = "打开「高级编辑」。"},
+			{text = "加两张卡：
+「不 温度不适 → 记住这里」：在暖水区里就记住那里。
+「能量高于 100% 且 温度不适 → 回到记忆点」：在外面吃饱了就回家分裂。
+
+「记住这里」不占用这一拍，放在最上面也没关系。", ring = "add", wait = "home_cards", goal = "卡组里有「记住这里」和「回到记忆点」。", why = "设置好了。吃饱的细胞会沿着冰墙绕回暖水区，后代也记得这个地方。"},
+			{text = "点击「投放到培养皿」。", ring = "go", wait = "release", goal = "点击「投放到培养皿」。"}],
+		run = ["点一只在外面吃饱的细胞，按 {track} 跟随，看它怎么绕过冰墙回家。"],
+	},
+	"7-2": {
+		design = ["这颗星球的长夜很冷，水会冻到 -20°C，普通细胞熬不过去。
+
+这关要学会把自己封进芽孢。",
+			{text = "在器官槽里装上「芽孢外壳」。", ring = "organ:spore", wait = "organ:spore", goal = "安装「芽孢外壳」。"},
+			{text = "打开「行为规则」，进入「高级编辑」，点击状态图里的「+」，添加「芽孢」状态。
+
+它会自动配好两张卡：觅食里「天黑了 → 进入芽孢」，芽孢里「天亮了 → 进入觅食」。", ring = "state_map", wait = "spore_state", goal = "添加「芽孢」状态。"},
+			{text = "形成芽孢要约 8 秒，这时最怕冷。天黑那一刻才开始形成，会冻死一些。
+
+点击「投放到培养皿」。", ring = "go", wait = "release", goal = "点击「投放到培养皿」。"}],
+		run = [{text = "长夜快来时，按 {heat} 撒盐，在细胞最多的地方撒一片：那里 60 秒不结冰，正在形成芽孢的细胞就不会冻死。", ring = "dock:brine", wait = "used:brine"}],
+	},
+	"7-3": {
+		design = ["冰下食物很少，但很稳定。这里比的不是谁生得快，而是谁活得稳。",
+			{text = "「繁殖」下面新开了「寿命」滑条。把它往右拖到 1.4 左右：活得更久，分裂少一点。", ring = "life", wait = "life_up", goal = "寿命调到 ×1.3 以上。"},
+			{text = "点击「投放到培养皿」。", ring = "go", wait = "release", goal = "点击「投放到培养皿」。"}],
+		run = ["看看种群曲线：寿命短的细胞会先冲高，再一起老死。"],
+	},
+	"7-4": {
+		design = ["雪藻带会随季节移动。每个季节结束时，当季的雪藻带里要有足够多的细胞。",
+			{text = "细胞没看见食物时要多游动才找得到新的雪藻带。打开「行为规则」，看看最后一张「能量高于 100% → 休息」：吃饱就停下，季节一变就落后了。可以把它删掉。", ring = "tab:rules", wait = "page:rules", goal = "打开「行为规则」。"},
+			{text = "点击「投放到培养皿」。", ring = "go", wait = "release", goal = "点击「投放到培养皿」。"}],
+		run = ["季节快变时，右上角会提醒新雪藻带的位置。按 {current} 用洋流把细胞往那边推一把。"],
+	},
+	"7-5": {
+		design = ["太阳虫守在暖水区门外。它靠粘住细胞维生，长夜里冷得更耗能。
+
+两条路：别喂它，让它饿死；或者把细胞送到右边的雪藻腔。",
+			{text = "这关有两个器官槽：装上「记忆泡」和「芽孢外壳」。", ring = "organ:spore", wait = "organs75", goal = "同时安装「记忆泡」和「芽孢外壳」。"},
+			{text = "打开「行为规则」，进入「高级编辑」：加「不 温度不适 → 记住这里」「能量高于 100% 且 温度不适 → 回到记忆点」，再添加「芽孢」状态。
+
+少在门外乱逛、长夜里变成芽孢，它就抓不到东西。", ring = "add", wait = "boss_cards", goal = "卡组里有记忆两张卡，并添加了「芽孢」状态。"},
+			{text = "点击「投放到培养皿」。", ring = "go", wait = "release", goal = "点击「投放到培养皿」。"}],
+		run = ["太阳虫周围那一圈是它的轴足能碰到的范围。它换地方时会把轴足收回来，这时最安全。"],
+	},
 	"3-1": {
 		design = ["暗水里视野很短，暗噬靠近时，往往只有离它最近的细胞能看见。试着让发现危险的细胞发出信号，提醒周围的同伴。",
 			{text = "暗噬游得比初始细胞快。先提高速度；预算不够的话，把繁殖降一级。", ring = "speed_fert", wait = "speed4", goal = "速度 → 4，繁殖 → 2（一共 12 点，正好守住低预算线）", why = "速度提高后，细胞更有机会逃脱暗噬。"},
@@ -743,6 +793,16 @@ func _met(w: String) -> bool:
 		return d != null and d.deck_editor.deck.any(func(c: Dictionary) -> bool:
 			return int(c.get("st", 0)) == Rules.S_ALERT and c.act == Rules.A_TO_FORAGE and c.c1 == Rules.C_STATE_TIME and float(c.t1) <= 14.0)
 	# Chapter 6.
+	if w == "home_cards":
+		return d != null and d.deck_editor.deck.any(func(c: Dictionary) -> bool: return c.act == Rules.A_REMEMBER) and d.deck_editor.deck.any(func(c: Dictionary) -> bool: return c.act == Rules.A_RETURN)
+	if w == "spore_state":
+		return d != null and d.deck_editor.states_used().has(Rules.S_SPORE)
+	if w == "life_up":
+		return d != null and d.life >= 1.3
+	if w == "organs75":
+		return d != null and d.organs.has("memory") and d.organs.has("spore")
+	if w == "boss_cards":
+		return _met("home_cards") and _met("spore_state")
 	if w == "fert4":
 		return d != null and float(d.genes[4]) >= 4.0
 	if w == "avoid_o2_card":
@@ -1096,6 +1156,10 @@ func _ring_rect(key: String) -> Rect2:
 			c = d.mutate_pill if d else null
 		"resp":
 			c = d.resp_pill if d else null
+		"life":
+			if d == null:
+				return Rect2()
+			c = d.tab_buttons["genome"] if d.page != "genome" else d.life_slider
 		"fert":
 			if d == null:
 				return Rect2()
