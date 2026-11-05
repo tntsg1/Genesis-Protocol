@@ -309,6 +309,8 @@ private:
 	std::vector<IronSpot> irons;
 	float iron_rate = 1.5f; // per second at the centre
 	float cell_graze = 3.0f; // energy/s a grazer takes off a producer cell (6 µm grazer)
+	float graze_rest = 1.0f;
+	float graze_refuge = 0.0f; // producers above this y (µm) cannot be grazed (0: none) // seconds a grazer digests after eating one up (it does not graze meanwhile)
 	void step_oxygen(float dt);
 	// Chapter 6 boss (6-5): a giant foraminiferan's pseudopod net on the
 	// seabed, coverage 0..1 per field cell. It spreads only where the water
@@ -318,6 +320,7 @@ private:
 	bool net_on = false;
 	int net_phase = 0;
 	float net_x = 1100.0f, net_y = 1300.0f, net_core = 70.0f;
+	float net_top = 0.0f; // it lies on the seabed: none above this y (µm)
 	float net_need = 0.06f, net_grow = 0.12f, net_shrink = 0.05f, net_drain = 3.0f, net_slow = 0.7f, net_use = 0.004f;
 	double net_fed = 0.0;
 	int net_caught = 0;

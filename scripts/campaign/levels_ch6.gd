@@ -182,7 +182,7 @@ const LEVELS := [
 		release_c = {at = Vector2(1300, 620), count = 4},
 		species = [
 			{label = "生产者", name = "晨光丝", role = "dawn", organs = ["photo"], genes = [2.0, 2.0, 1.0, 1.0, 3.0, 3.0, 3.0, 3.0]},
-			{label = "采集者", name = "采集者 B", role = "grazer", resp = 1, genes = [2.0, 2.5, 1.0, 1.0, 3.0, 3.0, 3.0, 3.0]},
+			{label = "采集者", name = "采集者 B", role = "grazer", resp = 2, genes = [2.0, 2.5, 1.0, 1.0, 3.0, 3.0, 3.0, 3.0]},
 			{label = "捕食者", name = "捕食者 C", role = "hunter", organs = ["cnido"], resp = 2, genes = [2.0, 2.5, 1.0, 2.0, 1.5, 3.0, 3.0, 3.0],
 				deck = [
 					{c1 = Rules.C_ENERGY_ABOVE, t1 = 1.0, c2 = Rules.C_NONE, t2 = 0.0, act = Rules.A_DIVIDE},
@@ -234,7 +234,7 @@ const LEVELS := [
 				SULFUR_FEW,
 			],
 		},
-		net = {center = Vector2(1100, 1250), core = 70.0, radius = 380.0, need = 0.04, grow = 0.2, shrink = 0.03, drain = 0.7, slow = 0.5, use = 0.001},
+		net = {center = Vector2(1100, 1250), core = 70.0, radius = 380.0, top = 850.0, need = 0.04, grow = 0.2, shrink = 0.03, drain = 0.7, slow = 0.5, use = 0.001},
 		release = {at = Vector2(1100, 380), count = 40},
 		resp = 2,
 		resp_open = true,
@@ -249,7 +249,7 @@ const LEVELS := [
 		goal = {kind = "net_push", frac = 0.12, hold = 30.0, text = "把伪足网的覆盖面积压到 12% 以下，并保持 30 秒。"},
 		challenge = {kind = "net_push_by", seconds = 240.0, text = "在第 4 分钟之前完成。"},
 		threats = ["熔岩滤食兽（原型：巨型有孔虫）
-它住在海床中央，从壳里伸出细丝织成黏网。碰到网的细胞会被拖慢，再慢慢消化掉。", "
+它住在海床中央，从壳里伸出细丝织成黏网。碰到网的细胞会被拖慢，再慢慢消化掉。网只铺在海床上，上层的水里没有网。细胞能察觉到附近的网，规则里的「逃离」会让它们躲开。", "
 它要靠氧气呼吸
 氧气浓度低于 4% 的地方，伪足会收回去；氧气越多，网铺得越快。", "
 你的采集者

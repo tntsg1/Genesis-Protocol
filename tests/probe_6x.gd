@@ -28,11 +28,11 @@ func _slot(l: Dictionary, k: int, genes := [], deck := [], resp := -1) -> Dictio
 func _initialize() -> void:
 	var id := OS.get_environment("P_LEVEL") if OS.get_environment("P_LEVEL") != "" else "6-1"
 	var l: Dictionary = Levels.by_id(id).duplicate(true)
-	for k in ["sulfide", "diffuse", "emit", "harm", "tox", "decay", "start", "graze", "need", "use"]:
+	for k in ["sulfide", "diffuse", "emit", "harm", "tox", "decay", "start", "graze", "need", "use", "graze_rest", "refuge"]:
 		var e := OS.get_environment("P_O2_" + k.to_upper())
 		if e != "":
 			l.world.oxygen[k] = float(e)
-	for k in ["need", "grow", "shrink", "drain", "slow", "use", "radius"]:
+	for k in ["need", "grow", "shrink", "drain", "slow", "use", "radius", "top"]:
 		var e := OS.get_environment("P_NET_" + k.to_upper())
 		if e != "" and l.has("net"):
 			l.net[k] = float(e)
@@ -83,8 +83,12 @@ func _initialize() -> void:
 				var st: Dictionary = sim.get_stats().species[ev.sp2]
 				var v := Vector2(1100, 1930)
 				diag = " 计%d 氧死%d 饿%d 老%d 泉心%.0f%% 泉边%.0f%% 中层%.0f%% 上层%.0f%%" % [ev.o2_dead, int(st.o2), int(st.starved), int(st.aged), sim.get_o2_at(v) * 100, sim.get_o2_at(v + Vector2(0, -200)) * 100, sim.get_o2_at(Vector2(1100, 1200)) * 100, sim.get_o2_at(Vector2(1100, 500)) * 100]
+			var gs: int = ev.sp2 if id == "6-4" else ev.sp
+			if sim and gs >= 0 and id in ["6-4", "6-5"]:
+				var st2: Dictionary = sim.get_stats().species[gs]
+				diag += " 采集者死因 饿%d 被吃%d 老%d 氧%d 生%d" % [int(st2.starved), int(st2.eaten), int(st2.aged), int(st2.o2), int(st2.births)]
 			if l.has("net"):
-				diag = " 网%.0f%%(峰%.0f%%) 达成%ds 吃%d" % [ev.net_cov * 100, ev.net_cov_peak * 100, int(ev.net_done), ev.net_caught]
+				diag += " 网%.0f%%(峰%.0f%%) 达成%ds 吃%d" % [ev.net_cov * 100, ev.net_cov_peak * 100, int(ev.net_done), ev.net_caught]
 			res[k] = [ev.stars(), ev.alive, ev.alive2, ev.alive3, ev.o2_mean, ev.held.duplicate(), ev.extinct, ev.t, diag], seeds)
 		WorkerThreadPool.wait_for_group_task_completion(task)
 		var g := 0

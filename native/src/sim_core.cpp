@@ -2156,7 +2156,7 @@ void SimCore::scan_one(int i) {
 					continue;
 				}
 				// Chapter 6: a producer cell is a grazer's food (bigger and closer is better).
-				if (S.diet == DIET_GRAZER && T.diet == DIET_PHOTO && d2 < vision_r * vision_r && join[j] <= 0.0f) {
+				if (S.diet == DIET_GRAZER && T.diet == DIET_PHOTO && d2 < vision_r * vision_r && join[j] <= 0.0f && y[j] >= graze_refuge) {
 					float score = (std::max(0.0f, energy[j]) + 5.0f) / (std::sqrt(d2) + 12.0f);
 					if (score > cfood_best) {
 						cfood_best = score;
@@ -2416,7 +2416,9 @@ void SimCore::step(float dt) {
 		// What it senses, kept for the deck and for explanations.
 		int food = S.diet == DIET_GRAZER && sc.food >= 0 && al_e[sc.food] > 0.0f ? sc.food : -1;
 		int lure = sc.lure >= 0 && sc.lure < (int)giants.size() ? sc.lure : -1;
-		int cfood = S.diet == DIET_GRAZER && food < 0 && sc.cfood >= 0 && alive[sc.cfood] && join[sc.cfood] <= 0.0f ? sc.cfood : -1;
+		// (Chapter 6: a grazer that has just eaten one up digests it first, as
+		// a real protist does: the brake on eating the producers bare.)
+		int cfood = S.diet == DIET_GRAZER && food < 0 && sc.cfood >= 0 && alive[sc.cfood] && join[sc.cfood] <= 0.0f && digest[i] <= 0.0f ? sc.cfood : -1;
 		// Chemosynthetic cells "see food" when richer vent water lies nearby.
 		float cgx = 0.0f, cgy = 0.0f;
 		bool chem_near = false;
@@ -2435,6 +2437,40 @@ void SimCore::step(float dt) {
 		sense[i] = (uint8_t)((food >= 0 || cfood >= 0 || chem_near || lure >= 0 ? S_ALGAE : 0) | (prey >= 0 ? S_PREY : 0) | (carcass >= 0 ? S_SHELL : 0) |
 				(threat >= 0 ? S_THREAT : 0) | (hurt[i] > 0.0f ? S_ATTACKED : 0));
 		threat_d[i] = threat >= 0 ? sc.threat_d : 1e9f;
+		// Chapter 6 boss: the pseudopod net is felt as a danger close by (a
+		// flee card runs from it as from a hunter).
+		bool net_near = false;
+		float ndx = 0.0f, ndy = 0.0f;
+		if (net_on) {
+			float best = 1e9f;
+			if (net_at(x[i], y[i]) > 0.15f) {
+				best = 0.0f;
+			}
+			for (int k = 0; k < 8; k++) {
+				const float a = k * 0.785398f;
+				for (float d : { 20.0f, 45.0f, 70.0f }) {
+					if (d < best && net_at(x[i] + std::cos(a) * d, y[i] + std::sin(a) * d) > 0.15f) {
+						best = d;
+						ndx += std::cos(a);
+						ndy += std::sin(a);
+					}
+				}
+			}
+			if (best < 1e8f) {
+				net_near = true;
+				if (ndx * ndx + ndy * ndy < 1e-4f) {
+					ndx = net_x - x[i];
+					ndy = net_y - y[i];
+				}
+				float nl = std::sqrt(ndx * ndx + ndy * ndy) + 1e-6f;
+				ndx /= nl;
+				ndy /= nl;
+				if (best < threat_d[i]) {
+					threat_d[i] = best;
+					sense[i] |= S_THREAT;
+				}
+			}
+		}
 		crowd[i] = (uint8_t)std::min(flock, 255);
 
 		// Run the deck: the first card whose conditions hold and whose action
@@ -2507,11 +2543,15 @@ void SimCore::step(float dt) {
 		tgy[i] = y[i];
 		switch (todo) {
 			case A_FLEE: {
-				if (threat < 0 || (sense[i] & S_THREAT) == 0) {
+				if (threat < 0 || (sense[i] & S_THREAT) == 0 || (net_near && threat_d[i] < sc.threat_d)) {
 					// Running from an alarm: away from where it smells strongest
-					// (right at its source, straight on).
+					// (right at its source, straight on); or from the net.
 					float sdx, sdy;
-					if (smell_which >= 0 && signal_dir(i, smell_which, sdx, sdy)) {
+					if (net_near) {
+						dirx = -ndx;
+						diry = -ndy;
+						wander[i] = std::atan2(diry, dirx);
+					} else if (smell_which >= 0 && signal_dir(i, smell_which, sdx, sdy)) {
 						dirx = -sdx;
 						diry = -sdy;
 						wander[i] = std::atan2(diry, dirx);
@@ -2946,6 +2986,7 @@ void SimCore::step(float dt) {
 				energy_out += rest * (1.0f - EAT_ALGAE_EFF);
 				energy[cfood] = 0.0f;
 				kill(cfood, CAUSE_EATEN);
+				digest[i] = graze_rest;
 			}
 			if (randf() < 1.2f * dt) {
 				emit(EV_GRAZE, x[cfood], y[cfood], sp[i], x[i], y[i]);
@@ -5718,6 +5759,8 @@ void SimCore::set_oxygen(Dictionary p) {
 	fac_harm = p.get("fac_harm", fac_harm);
 	iron_rate = p.get("iron", iron_rate);
 	cell_graze = p.get("graze", cell_graze);
+	graze_rest = p.get("graze_rest", graze_rest);
+	graze_refuge = p.get("refuge", graze_refuge);
 	float start = p.get("start", 0.0f);
 	for (int j = 0; j < gh; j++) {
 		for (int i = 0; i < gw; i++) {
@@ -5868,6 +5911,7 @@ void SimCore::set_net(Dictionary p) {
 	net_drain = p.get("drain", net_drain);
 	net_slow = p.get("slow", net_slow);
 	net_use = p.get("use", net_use);
+	net_top = p.get("top", 0.0f);
 	float r0 = p.get("radius", 300.0f);
 	for (int j = 0; j < gh; j++) {
 		for (int i = 0; i < gw; i++) {
@@ -5892,7 +5936,7 @@ void SimCore::step_net(float dt) {
 		for (int i = 0; i < gw; i++) {
 			const int c = j * gw + i;
 			const float wx = (i + 0.5f) * cell, wy = (j + 0.5f) * cell;
-			if (!inside_dish(wx, wy, 6.0f)) {
+			if (!inside_dish(wx, wy, 6.0f) || wy < net_top) {
 				net_tmp[c] = 0.0f;
 				continue;
 			}
