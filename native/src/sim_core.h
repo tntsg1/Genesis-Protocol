@@ -39,7 +39,9 @@ public:
 
 	// Chemosynthetic cells live on the vents' chemical energy (like algae on
 	// light), sharing it with their neighbours; they eat nothing.
-	enum Diet { DIET_GRAZER = 0, DIET_PREDATOR = 1, DIET_CHEMO = 2 };
+	// Chapter 6: photosynthetic producers (the 光合膜 organ) live on light and
+	// give off oxygen; grazers there eat them, as they would algae.
+	enum Diet { DIET_GRAZER = 0, DIET_PREDATOR = 1, DIET_CHEMO = 2, DIET_PHOTO = 3 };
 	// Event stream for visual effects: (type, x, y, species, a, b) per event.
 	enum Event {
 		EV_BIRTH = 0,   // a, b = parent position
@@ -71,6 +73,7 @@ public:
 		ACT_TRACK,   // following a smell (signal A or B) up to where it is strongest
 		ACT_DISPERSE, // swimming away from the peers around it
 		ACT_SLUG,     // part of a crawling aggregate
+		ACT_AIR,      // swimming away from oxygen, or toward it (chapter 6)
 	};
 
 	// Behaviour cards (GDD 3.2). Each organism carries its own deck, checked
@@ -97,6 +100,7 @@ public:
 		C_STATE_TIME,    // in its current state for more than t seconds
 		C_PEER_STATE,    // a peer in sight is in state t (needs the recognition protein)
 		C_IMMUNE,        // carries a memory of the phage (level 16; needs the memory fragment)
+		C_O2_ABOVE,      // oxygen here above t (0..1 of full; chapter 6)
 		C_COUNT,
 	};
 	enum Act : uint8_t {
@@ -121,6 +125,8 @@ public:
 		A_DISPERSE,      // swim away from the peers around it (level 15)
 		A_INDUCE,        // wake the phage in its own genes: it dies of it, and its phages go for the others (level 17)
 		A_AGGREGATE,     // join the peers around it in one body that crawls as one (level 20)
+		A_AVOID_O2,      // swim toward the least oxygen in reach (chapter 6)
+		A_SEEK_O2,       // swim toward the most oxygen in reach
 		A_COUNT,
 	};
 	static constexpr int MAX_CARDS = 8;
@@ -211,6 +217,11 @@ public:
 		float motor_speed = 1.0f, turn_mult = 1.0f, move_cost = 1.0f, rest_cost = 1.0f;
 		float store = 0.0f; // storage granules (level 8): thriftier, slower to divide
 		int organ_mask = 0; // installed organs, bit k = Organs.LIST[k]: drawn on the cells
+		// Chapter 6 respiration: 0 none (oxygen means nothing: every earlier
+		// level), 1 anaerobic (oxygen poisons it), 2 aerobic (food yields far
+		// more with oxygen, little without), 3 facultative (both, each a little worse).
+		int resp = 0;
+		bool reseed = true; // a chemosynthetic native drifts back out of the vents now and then (not a player's)
 		std::vector<Card> deck; // founders start with this deck
 		int alive = 0;
 		int births = 0;
@@ -222,8 +233,9 @@ public:
 		int deaths_phage = 0;
 		int deaths_stalk = 0;
 		int deaths_hatch = 0;
+		int deaths_o2 = 0;
 		// Where its energy went: all running costs, and the water's share.
-		double burn_total = 0.0, burn_temp = 0.0, burn_acid = 0.0;
+		double burn_total = 0.0, burn_temp = 0.0, burn_acid = 0.0, burn_o2 = 0.0;
 	};
 
 	// One organism's look around this tick (filled in parallel).
@@ -232,6 +244,7 @@ public:
 	static constexpr int PREY_CAND = 6;
 	struct Scan {
 		int threat = -1, prey = -1, food = -1, carcass = -1, flock = 0, lure = -1;
+		int cfood = -1; // chapter 6: a producer cell a grazer can eat
 		float fx = 0, fy = 0, sx = 0, sy = 0, threat_d = 1e9f;
 		int ncand = 0;
 		int peer[4] = { -1, -1, -1, -1 }; // nearest peer in sight in each state
@@ -280,6 +293,24 @@ private:
 	float algae_growth = 1.0f, algae_upkeep = 1.0f;
 	std::vector<float> temp, acid, rad, vent, chem, light_base, sig_a, sig_b;
 	std::vector<float> enzyme; // digestive enzyme in the water (level 13): grazing on tough algae pays only where it is thick
+	// Chapter 6: dissolved oxygen, 0..1 of full (as the HUD shows it, x100 %).
+	// Producers give it off in the light; it spreads and slowly fades; the
+	// vents' sulfide and aerobic breathing take it up; iron dust soaks it.
+	std::vector<float> o2;
+	bool o2_on = false;
+	int o2_phase = 0;
+	float o2_decay = 0.003f, o2_diffuse = 1.2f, o2_sulfide = 0.6f, o2_emit = 0.05f, o2_use = 0.02f;
+	float o2_tox = 0.08f, o2_harm = 1.2f, o2_need = 0.25f;
+	float aero_mult = 3.0f, aero_low = 0.45f, fac_mult = 2.2f, fac_low = 0.85f, fac_harm = 0.0f;
+	double o2_made = 0.0, o2_breathed = 0.0;
+	struct IronSpot {
+		float x, y, r, life, ttl;
+	};
+	std::vector<IronSpot> irons;
+	float iron_rate = 1.5f; // per second at the centre
+	void step_oxygen(float dt);
+	bool o2_dir(int i, bool up, float &dx, float &dy) const;
+	float resp_gain(int i) const;
 	double vent_total = 0.0;
 	int signal_phase = 0;
 	float dish_x = 0.0f, dish_y = 0.0f, dish_r = 0.0f;
@@ -603,6 +634,17 @@ public:
 	int add_species(Dictionary params);
 	void set_dish(Vector2 center, float radius);
 	void add_light(Vector2 pos, float radius, float power);
+	// Chapter 6: light from above, full at y_full, none below y_dark.
+	void add_light_band(float y_full, float y_dark, float power);
+	// Chapter 6 oxygen: {on, decay, diffuse, sulfide, emit, use, tox, harm,
+	// need, aero_mult, aero_low, fac_mult, fac_low, fac_harm, start}.
+	void set_oxygen(Dictionary params);
+	int add_iron(Vector2 pos, float radius, float seconds);
+	PackedFloat32Array get_o2_field() const;
+	float get_o2_at(Vector2 pos) const;
+	// The dish's mean oxygen (0..1), and the share of its water above `above`.
+	float get_o2_mean() const;
+	float get_o2_share(float above) const;
 	// Environment: base values {temp, acid, radiation} and zones {center,
 	// radius, temp, acid, radiation, light, vent}.
 	void set_base_environment(Dictionary params);

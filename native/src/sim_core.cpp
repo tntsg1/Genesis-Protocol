@@ -20,6 +20,7 @@ constexpr int CAUSE_ACID = 4;
 constexpr int CAUSE_PHAGE = 5;
 constexpr int CAUSE_STALK = 6; // gave itself to a fruiting body's stalk
 constexpr int CAUSE_HATCH = 7; // its young left and the body it built for them died (Volvox)
+constexpr int CAUSE_O2 = 8;    // starved while oxygen did most of the draining (an anaerobe, chapter 6)
 constexpr float COL_BLOCK = 22.0f;  // one block's side, µm (scripts/colony.gd has the same)
 constexpr float COL_GROW = 14.0f;   // seconds for a hatchling to reach full size
 constexpr float COL_GHOST = 16.0f;  // seconds the empty shell lasts
@@ -31,6 +32,7 @@ constexpr float TEMP_SEVERE = 10.0f;    // beyond this many degrees it also hurt
 constexpr float TEMP_HURT = 0.12f;      // extra energy/s per degree past severe
 constexpr float CHEMO_RATE = 4.0f;      // energy/s at full vent chemistry (shared with neighbours)
 constexpr float CHEMO_SEED = 0.35f;     // vent-borne chemosynthetic cells per second
+constexpr float PHOTO_RATE = 3.0f;      // energy/s at light 1 for a producer (光合膜; shared with neighbours)
 constexpr float ACID_COST = 1.5f;       // energy/s at acidity 1 (armour softens it)
 constexpr float TOL_UPKEEP = 0.04f;     // per tolerance level around the default 2.5
 // Gene trade-offs (DECISIONS 第十四轮 Q32): no gene is "max it and done".
@@ -209,6 +211,11 @@ void SimCore::setup(Vector2 world_size, int seed) {
 	sig_a.assign(gw * gh, 0.0f);
 	sig_b.assign(gw * gh, 0.0f);
 	enzyme.assign(gw * gh, 0.0f);
+	o2.assign(gw * gh, 0.0f);
+	o2_on = false;
+	o2_phase = 0;
+	o2_made = o2_breathed = 0.0;
+	irons.clear();
 	vent_total = 0.0;
 	signal_phase = 0;
 	agw = (int)std::ceil(world_w / acell);
@@ -285,6 +292,8 @@ int SimCore::add_species(Dictionary p) {
 	s.move_cost = (float)(double)p.get("move_cost", 1.0);
 	s.rest_cost = (float)(double)p.get("rest_cost", 1.0);
 	s.store = (float)(double)p.get("store", 0.0);
+	s.resp = (int)p.get("resp", 0);
+	s.reseed = (bool)p.get("reseed", true);
 	s.rotifer = p.get("rotifer", false);
 	if (s.rotifer) {
 		s.rot_reach = p.get("rot_reach", s.rot_reach);
@@ -918,7 +927,7 @@ void SimCore::step_algae(float dt) {
 	// the rich water (as algae spores do where light falls), so a vent's
 	// producers can recover after being grazed bare.
 	for (size_t s = 0; s < species.size(); s++) {
-		if (species[s].diet != DIET_CHEMO || randf() >= CHEMO_SEED * dt) {
+		if (species[s].diet != DIET_CHEMO || !species[s].reseed || randf() >= CHEMO_SEED * dt) {
 			continue;
 		}
 		for (int tries = 0; tries < 12; tries++) {
@@ -1503,6 +1512,7 @@ void SimCore::step_interventions(float dt) {
 	age(barriers);
 	age(temp_spots);
 	age(jets);
+	age(irons);
 	// Warm / cold spots fade: refresh the water twice a second while any
 	// is on (and once more when the last one goes).
 	temp_rebuild -= dt;
@@ -1573,6 +1583,15 @@ Array SimCore::get_interventions() const {
 		d["left"] = sp.ttl - sp.life;
 		out.push_back(d);
 	}
+	for (const IronSpot &ir : irons) {
+		Dictionary d;
+		d["kind"] = "iron";
+		d["center"] = Vector2(ir.x, ir.y);
+		d["radius"] = ir.r;
+		d["fade"] = spot_fade(ir.life, ir.ttl);
+		d["left"] = ir.ttl - ir.life;
+		out.push_back(d);
+	}
 	for (const Jet &jt : jets) {
 		Dictionary d;
 		d["kind"] = "current";
@@ -1638,6 +1657,8 @@ void SimCore::kill(int i, int cause) {
 		S.deaths_temp++;
 	} else if (cause == CAUSE_ACID) {
 		S.deaths_acid++;
+	} else if (cause == CAUSE_O2) {
+		S.deaths_o2++;
 	} else {
 		S.deaths_age++;
 	}
@@ -1830,6 +1851,7 @@ bool SimCore::cond_true(int i, uint8_t c, float t) const {
 		case C_STATE_TIME: return st_time[i] > t;
 		case C_PEER_STATE: return scans[i].peer[std::min(3, std::max(0, (int)t))] >= 0;
 		case C_IMMUNE: return immune[i] != 0;
+		case C_O2_ABOVE: return o2_on && o2[nutrient_index(x[i], y[i])] > t;
 		case C_PREY_NEAR:
 		case C_PREY_SMALL: {
 			Card one;
@@ -1915,6 +1937,11 @@ bool SimCore::act_possible(int i, uint8_t a) const {
 		case A_SEEK_SIG_B: {
 			float dx, dy;
 			return signal_dir(i, a - A_SEEK_SIG_A, dx, dy);
+		}
+		case A_AVOID_O2:
+		case A_SEEK_O2: {
+			float dx, dy;
+			return o2_dir(i, a == A_SEEK_O2, dx, dy);
 		}
 		case A_TO_FORAGE:
 		case A_TO_ALERT:
@@ -2059,6 +2086,8 @@ void SimCore::scan_one(int i) {
 
 	// Neighbour scan: nearest threat, nearest prey, flock centre, separation.
 	int threat = -1, prey = -1;
+	int cfood = -1;
+	float cfood_best = 0.0f;
 	// Every predator in sight is noted with its distance; the deck decides how
 	// close is too close (default card: 60).
 	float threat_d2 = vision_r * vision_r, prey_d2 = vision_r * vision_r;
@@ -2120,6 +2149,14 @@ void SimCore::scan_one(int i) {
 					}
 					continue;
 				}
+				// Chapter 6: a producer cell is a grazer's food (bigger and closer is better).
+				if (S.diet == DIET_GRAZER && T.diet == DIET_PHOTO && d2 < vision_r * vision_r && join[j] <= 0.0f) {
+					float score = (std::max(0.0f, energy[j]) + 5.0f) / (std::sqrt(d2) + 12.0f);
+					if (score > cfood_best) {
+						cfood_best = score;
+						cfood = j;
+					}
+				}
 				bool they_eat_me = T.diet == DIET_PREDATOR && r < T.radius * 0.9f;
 				bool i_eat_them = S.diet == DIET_PREDATOR && T.radius < r * 0.9f;
 				if (they_eat_me && d2 < threat_d2) {
@@ -2176,6 +2213,7 @@ void SimCore::scan_one(int i) {
 	out.sx = sx;
 	out.sy = sy;
 	out.flock = flock;
+	out.cfood = cfood;
 	out.food = -1;
 	out.carcass = -1;
 	out.lure = -1;
@@ -2251,6 +2289,7 @@ void SimCore::step(float dt) {
 	auto t0 = clk::now();
 	step_nutrients(dt);
 	step_signals(dt);
+	step_oxygen(dt);
 	auto t1 = clk::now();
 	step_algae(dt);
 	step_shells(dt);
@@ -2368,6 +2407,7 @@ void SimCore::step(float dt) {
 		// What it senses, kept for the deck and for explanations.
 		int food = S.diet == DIET_GRAZER && sc.food >= 0 && al_e[sc.food] > 0.0f ? sc.food : -1;
 		int lure = sc.lure >= 0 && sc.lure < (int)giants.size() ? sc.lure : -1;
+		int cfood = S.diet == DIET_GRAZER && food < 0 && sc.cfood >= 0 && alive[sc.cfood] && join[sc.cfood] <= 0.0f ? sc.cfood : -1;
 		// Chemosynthetic cells "see food" when richer vent water lies nearby.
 		float cgx = 0.0f, cgy = 0.0f;
 		bool chem_near = false;
@@ -2375,10 +2415,15 @@ void SimCore::step(float dt) {
 			cgx = chem[nutrient_index(x[i] + 16.0f, y[i])] - chem[nutrient_index(x[i] - 16.0f, y[i])];
 			cgy = chem[nutrient_index(x[i], y[i] + 16.0f)] - chem[nutrient_index(x[i], y[i] - 16.0f)];
 			chem_near = chem[nutrient_index(x[i], y[i])] < 0.95f && cgx * cgx + cgy * cgy > 1e-6f;
+		} else if (S.diet == DIET_PHOTO) {
+			// A producer "sees food" where brighter water lies nearby.
+			cgx = light[nutrient_index(x[i] + 24.0f, y[i])] - light[nutrient_index(x[i] - 24.0f, y[i])];
+			cgy = light[nutrient_index(x[i], y[i] + 24.0f)] - light[nutrient_index(x[i], y[i] - 24.0f)];
+			chem_near = cgx * cgx + cgy * cgy > 1e-8f;
 		}
 		int carcass = S.diet == DIET_PREDATOR && sc.carcass >= 0 && sh_e[sc.carcass] > 0.0f ? sc.carcass : -1;
 		hurt[i] = std::max(0.0f, hurt[i] - dt);
-		sense[i] = (uint8_t)((food >= 0 || chem_near || lure >= 0 ? S_ALGAE : 0) | (prey >= 0 ? S_PREY : 0) | (carcass >= 0 ? S_SHELL : 0) |
+		sense[i] = (uint8_t)((food >= 0 || cfood >= 0 || chem_near || lure >= 0 ? S_ALGAE : 0) | (prey >= 0 ? S_PREY : 0) | (carcass >= 0 ? S_SHELL : 0) |
 				(threat >= 0 ? S_THREAT : 0) | (hurt[i] > 0.0f ? S_ATTACKED : 0));
 		threat_d[i] = threat >= 0 ? sc.threat_d : 1e9f;
 		crowd[i] = (uint8_t)std::min(flock, 255);
@@ -2490,8 +2535,8 @@ void SimCore::step(float dt) {
 				tgy[i] = y[prey];
 			} break;
 			case A_SEEK_ALGAE: {
-				if (S.diet == DIET_CHEMO) {
-					// Up the chemical gradient, toward the vent.
+				if (S.diet == DIET_CHEMO || S.diet == DIET_PHOTO) {
+					// Up the chemical gradient, toward the vent (a producer: toward the light).
 					float gl = std::sqrt(cgx * cgx + cgy * cgy) + 1e-6f;
 					dirx = cgx / gl;
 					diry = cgy / gl;
@@ -2512,6 +2557,22 @@ void SimCore::step(float dt) {
 					wander[i] = std::atan2(ly, lx);
 					tgx[i] = giants[lure].x;
 					tgy[i] = giants[lure].y;
+					break;
+				}
+				if (food < 0 && cfood >= 0) {
+					// Chapter 6: a producer cell, grazed down where it floats.
+					float dx = x[cfood] - x[i], dy = y[cfood] - y[i];
+					float d = std::max(1e-3f, std::sqrt(dx * dx + dy * dy));
+					float reach = body_r + species[sp[cfood]].extent + 4.0f;
+					bool touching = d < reach;
+					dirx = dx / d;
+					diry = dy / d;
+					want = touching ? 0.08f : clampf((d - reach) / 45.0f + 0.12f, 0.12f, 0.75f);
+					act = touching ? ACT_GRAZE : ACT_SEEK_FOOD;
+					wander[i] = std::atan2(dy, dx);
+					target[i] = id[cfood];
+					tgx[i] = x[cfood];
+					tgy[i] = y[cfood];
 					break;
 				}
 				float dx = al_x[food] - x[i], dy = al_y[food] - y[i];
@@ -2671,6 +2732,20 @@ void SimCore::step(float dt) {
 				tgx[i] = x[i] + dirx * 60.0f;
 				tgy[i] = y[i] + diry * 60.0f;
 			} break;
+			case A_AVOID_O2:
+			case A_SEEK_O2: {
+				// Away from oxygen (into the anoxic water), or toward it.
+				float odx, ody;
+				if (o2_dir(i, todo == A_SEEK_O2, odx, ody)) {
+					dirx = odx;
+					diry = ody;
+					wander[i] = std::atan2(diry, dirx);
+				}
+				want = 0.85f;
+				act = ACT_AIR;
+				tgx[i] = x[i] + dirx * 60.0f;
+				tgy[i] = y[i] + diry * 60.0f;
+			} break;
 			case A_TO_FORAGE:
 			case A_TO_ALERT:
 			case A_TO_BREED:
@@ -2806,11 +2881,26 @@ void SimCore::step(float dt) {
 			wander[i] = std::atan2(-ny, -nx) + gauss() * 0.6f;
 		}
 
+		// Chapter 6: what a meal is worth depends on how it breathes and the
+		// oxygen here (1 everywhere oxygen means nothing).
+		const float rmul = resp_gain(i);
 		// Chemosynthesis: the vent's chemistry, shared among neighbours.
 		if (S.diet == DIET_CHEMO) {
 			float gain = CHEMO_RATE * chem[nutrient_index(x[i], y[i])] * S.size_factor / (1.0f + 0.1f * flock) * dt;
 			energy[i] += gain;
 			energy_in += gain;
+		}
+		// Photosynthesis (光合膜): light, shared with its neighbours (they shade
+		// one another); oxygen goes into the water as it works.
+		if (S.diet == DIET_PHOTO) {
+			int lc = nutrient_index(x[i], y[i]);
+			float gain = PHOTO_RATE * light[lc] * S.size_factor / (1.0f + 0.04f * flock) * dt;
+			energy[i] += gain;
+			energy_in += gain;
+			if (o2_on) {
+				o2[lc] += gain * o2_emit;
+				o2_made += gain * o2_emit;
+			}
 		}
 		// A boss engulfs every smaller cell its body touches, whatever it is
 		// doing (a crowd in its path goes in all at once).
@@ -2824,11 +2914,32 @@ void SimCore::step(float dt) {
 				float touch = S.extent + species[sp[j]].extent;
 				if (dx * dx + dy * dy < touch * touch) {
 					float rest = std::max(0.0f, energy[j]) + body_energy(sp[j]);
-					energy[i] += rest * EAT_PREY_EFF;
+					energy[i] += rest * EAT_PREY_EFF * rmul;
+					energy_in += rest * EAT_PREY_EFF * (rmul - 1.0f);
 					energy_out += rest * (1.0f - EAT_PREY_EFF);
 					energy[j] = 0.0f;
 					kill(j, CAUSE_EATEN);
 				}
+			}
+		}
+		// Chapter 6: grazing a producer cell (it is eaten down, then dies).
+		if (act == ACT_GRAZE && food < 0 && cfood >= 0 && alive[cfood]) {
+			float take = std::min(std::max(0.0f, energy[cfood]), 9.0f * (r / 6.0f) * dt);
+			energy[cfood] -= take;
+			hurt[cfood] = 2.0f;
+			energy[i] += take * EAT_ALGAE_EFF * rmul;
+			energy_in += take * EAT_ALGAE_EFF * (rmul - 1.0f);
+			energy_out += take * (1.0f - EAT_ALGAE_EFF);
+			if (energy[cfood] <= 0.5f) {
+				float rest = std::max(0.0f, energy[cfood]) + body_energy(sp[cfood]);
+				energy[i] += rest * EAT_ALGAE_EFF * rmul;
+				energy_in += rest * EAT_ALGAE_EFF * (rmul - 1.0f);
+				energy_out += rest * (1.0f - EAT_ALGAE_EFF);
+				energy[cfood] = 0.0f;
+				kill(cfood, CAUSE_EATEN);
+			}
+			if (randf() < 1.2f * dt) {
+				emit(EV_GRAZE, x[cfood], y[cfood], sp[i], x[i], y[i]);
 			}
 		}
 		// Feeding.
@@ -2850,7 +2961,8 @@ void SimCore::step(float dt) {
 			if (algae_tough > 0.0f) {
 				eff *= (1.0f - algae_tough) + algae_tough * clampf((enzyme[nutrient_index(x[i], y[i])] - ENZ_MIN) / (ENZ_FULL - ENZ_MIN), 0.0f, 1.0f);
 			}
-			energy[i] += take * eff;
+			energy[i] += take * eff * rmul;
+			energy_in += take * eff * (rmul - 1.0f);
 			energy_out += take * (1.0f - eff);
 			if (act == ACT_GRAZE) {
 				target[i] = -1 - food;
@@ -2866,7 +2978,8 @@ void SimCore::step(float dt) {
 				sh_e[carcass] -= take;
 				// Teeth or gut: the weaker the attack, the more a shell yields.
 				float eff = EAT_SHELL_EFF + 0.3f * clampf((3.2f - t_attack[i]) / 1.6f, 0.0f, 1.0f);
-				energy[i] += take * eff;
+				energy[i] += take * eff * rmul;
+				energy_in += take * eff * (rmul - 1.0f);
 				energy_out += take * (1.0f - eff);
 			}
 		} else if (act == ACT_HUNT && prey >= 0 && alive[prey]) {
@@ -2901,12 +3014,14 @@ void SimCore::step(float dt) {
 				if (randf() < 3.0f * dt) {
 					emit(EV_BITE, x[prey], y[prey], sp[prey], x[i], y[i]);
 				}
-				energy[i] += take * EAT_PREY_EFF;
+				energy[i] += take * EAT_PREY_EFF * rmul;
+				energy_in += take * EAT_PREY_EFF * (rmul - 1.0f);
 				energy_out += take * (1.0f - EAT_PREY_EFF);
 				if (energy[prey] <= 0.5f) {
 					// Swallowed whole: the body goes to the predator, no shell.
 					float rest = std::max(0.0f, energy[prey]) + body_energy(sp[prey]);
-					energy[i] += rest * EAT_PREY_EFF;
+					energy[i] += rest * EAT_PREY_EFF * rmul;
+					energy_in += rest * EAT_PREY_EFF * (rmul - 1.0f);
 					energy_out += rest * (1.0f - EAT_PREY_EFF);
 					energy[prey] = 0.0f;
 					// The prey goes in whole and is digested where it can be seen.
@@ -2944,19 +3059,32 @@ void SimCore::step(float dt) {
 		float dev = std::max(0.0f, std::abs(temp[ec] - t_topt[i]) - band_for(t_ttol[i]));
 		float st = (TEMP_COST * dev + (dev > TEMP_SEVERE ? TEMP_HURT * (dev - TEMP_SEVERE) : 0.0f)) * S.size_factor;
 		float sa = acid[ec] * ACID_COST * S.size_factor / (1.0f + 0.35f * t_armor[i]);
+		// Chapter 6: oxygen above the threshold poisons an anaerobe, the more
+		// the thicker it is (a facultative one only if the level says so).
+		float so = 0.0f;
+		if (o2_on && S.diet != DIET_PHOTO && (S.resp == 1 || (S.resp == 3 && fac_harm > 0.0f))) {
+			so = std::max(0.0f, o2[ec] - o2_tox) * o2_harm * S.size_factor * (S.resp == 3 ? fac_harm : 1.0f);
+		}
 		stress_t[i] = st;
-		stress_a[i] = sa;
+		stress_a[i] = sa + so;
 		float own = std::max(0.0f, base + move + upkeep);
-		float cost = std::min(energy[i], (own + st + sa) * dt);
+		float cost = std::min(energy[i], (own + st + sa + so) * dt);
 		{
 			Species &W = species[sp[i]];
-			float k = cost / std::max(1e-6f, (own + st + sa) * dt);
+			float k = cost / std::max(1e-6f, (own + st + sa + so) * dt);
 			W.burn_total += cost;
 			W.burn_temp += st * dt * k;
 			W.burn_acid += sa * dt * k;
+			W.burn_o2 += so * dt * k;
 		}
 		energy[i] -= cost;
 		energy_out += cost;
+		// Aerobic breathing takes oxygen from the water in step with its burn.
+		if (o2_on && S.diet != DIET_PHOTO && (S.resp == 2 || S.resp == 3)) {
+			float use = std::min(o2[ec], own * dt * o2_use);
+			o2[ec] -= use;
+			o2_breathed += use;
+		}
 		// Dormancy slows the clock as well as the metabolism: a lurking
 		// hunter can outlast a lean spell instead of ageing out in it.
 		age[i] += state[i] == S_SLEEP ? dt * 0.25f : (resting ? dt * 0.5f : dt);
@@ -3058,8 +3186,8 @@ void SimCore::step(float dt) {
 			// The water killed it when heat, cold or acid took a third or more
 			// of what it was burning.
 			int cause = CAUSE_STARVE;
-			if (st + sa > 0.5f * own) {
-				cause = st >= sa ? CAUSE_TEMP : CAUSE_ACID;
+			if (st + sa + so > 0.5f * own) {
+				cause = so >= st && so >= sa ? CAUSE_O2 : (st >= sa ? CAUSE_TEMP : CAUSE_ACID);
 			}
 			kill(i, cause);
 			continue;
@@ -5540,6 +5668,174 @@ PackedFloat32Array SimCore::get_light_field() const {
 	return out;
 }
 
+
+// --- chapter 6: light from above, oxygen ---------------------------------------
+
+void SimCore::add_light_band(float y_full, float y_dark, float power) {
+	for (int j = 0; j < gh; j++) {
+		float wy = (j + 0.5f) * cell;
+		float t = clampf((y_dark - wy) / std::max(1.0f, y_dark - y_full), 0.0f, 1.0f);
+		t = t * t * (3.0f - 2.0f * t);
+		for (int i = 0; i < gw; i++) {
+			if (inside_dish((i + 0.5f) * cell, wy, 0.0f)) {
+				light_base[j * gw + i] += power * t;
+			}
+		}
+	}
+	rebuild_env();
+}
+
+void SimCore::set_oxygen(Dictionary p) {
+	o2_on = (bool)p.get("on", true);
+	o2_decay = p.get("decay", o2_decay);
+	o2_diffuse = p.get("diffuse", o2_diffuse);
+	o2_sulfide = p.get("sulfide", o2_sulfide);
+	o2_emit = p.get("emit", o2_emit);
+	o2_use = p.get("use", o2_use);
+	o2_tox = p.get("tox", o2_tox);
+	o2_harm = p.get("harm", o2_harm);
+	o2_need = p.get("need", o2_need);
+	aero_mult = p.get("aero_mult", aero_mult);
+	aero_low = p.get("aero_low", aero_low);
+	fac_mult = p.get("fac_mult", fac_mult);
+	fac_low = p.get("fac_low", fac_low);
+	fac_harm = p.get("fac_harm", fac_harm);
+	iron_rate = p.get("iron", iron_rate);
+	float start = p.get("start", 0.0f);
+	for (int j = 0; j < gh; j++) {
+		for (int i = 0; i < gw; i++) {
+			o2[j * gw + i] = inside_dish((i + 0.5f) * cell, (j + 0.5f) * cell, 0.0f) ? start : 0.0f;
+		}
+	}
+}
+
+int SimCore::add_iron(Vector2 pos, float radius, float seconds) {
+	irons.push_back({ pos.x, pos.y, radius, 0.0f, seconds });
+	return (int)irons.size() - 1;
+}
+
+void SimCore::step_oxygen(float dt) {
+	if (!o2_on || gw == 0 || ++o2_phase % 2) {
+		return;
+	}
+	const float d2 = dt * 2.0f;
+	transport(o2, o2_diffuse, d2);
+	// Fading, and the vents' sulfide taking it up (so the water round a vent
+	// stays anoxic: a refuge).
+	for (int c = 0; c < gw * gh; c++) {
+		float k = o2_decay + o2_sulfide * chem[c];
+		o2[c] = clampf(o2[c] * std::exp(-k * d2), 0.0f, 1.5f);
+	}
+	// Iron dust soaks it up where it was scattered (banded iron formations).
+	for (const IronSpot &ir : irons) {
+		float f = spot_fade(ir.life, ir.ttl);
+		int i0 = std::max(0, (int)((ir.x - ir.r) / cell)), i1 = std::min(gw - 1, (int)((ir.x + ir.r) / cell));
+		int j0 = std::max(0, (int)((ir.y - ir.r) / cell)), j1 = std::min(gh - 1, (int)((ir.y + ir.r) / cell));
+		for (int j = j0; j <= j1; j++) {
+			for (int i = i0; i <= i1; i++) {
+				float dx = (i + 0.5f) * cell - ir.x, dy = (j + 0.5f) * cell - ir.y;
+				float u = clampf((ir.r - std::sqrt(dx * dx + dy * dy)) / (ir.r * 0.4f), 0.0f, 1.0f);
+				if (u > 0.0f) {
+					o2[j * gw + i] *= std::exp(-iron_rate * u * f * d2);
+				}
+			}
+		}
+	}
+}
+
+// A meal's worth by how it breathes: an aerobe gets aero_mult with oxygen
+// enough (need), little without; a facultative one a little less either way.
+float SimCore::resp_gain(int i) const {
+	const Species &S = species[sp[i]];
+	if (!o2_on || S.resp <= 1) {
+		return 1.0f;
+	}
+	float u = clampf(o2[nutrient_index(x[i], y[i])] / std::max(1e-4f, o2_need), 0.0f, 1.0f);
+	return S.resp == 2 ? lerpf(aero_low, aero_mult, u) : lerpf(fac_low, fac_mult, u);
+}
+
+// Toward the most (up) or least oxygen within reach; none when it is already
+// where it wants to be (an anaerobe in anoxic water stays put).
+bool SimCore::o2_dir(int i, bool up, float &dx, float &dy) const {
+	if (!o2_on) {
+		return false;
+	}
+	const float here = o2[nutrient_index(x[i], y[i])];
+	if (!up && here < 0.01f) {
+		return false;
+	}
+	float best = up ? std::max(here * 1.05f, here + 0.01f) : std::min(here * 0.95f, here - 0.005f);
+	bool found = false;
+	const float range = 220.0f;
+	for (int k = 0; k < 8; k++) {
+		const float a = k * 0.785398f;
+		const float cx = std::cos(a), cy = std::sin(a);
+		for (float d : { range * 0.2f, range * 0.45f, range * 0.7f, range }) {
+			const float sx = x[i] + cx * d, sy = y[i] + cy * d;
+			if (!inside_dish(sx, sy, 10.0f)) {
+				continue;
+			}
+			// Far water counts for a little less: the nearest good patch wins.
+			float v = o2[nutrient_index(sx, sy)];
+			v = up ? v * (1.0f - 0.2f * d / range) : v * (1.0f + 0.2f * d / range) + 0.002f * d / range;
+			if (up ? v > best : v < best) {
+				best = v;
+				dx = cx;
+				dy = cy;
+				found = true;
+			}
+		}
+	}
+	return found;
+}
+
+PackedFloat32Array SimCore::get_o2_field() const {
+	PackedFloat32Array out;
+	out.resize(gw * gh);
+	float *w = out.ptrw();
+	for (int c = 0; c < gw * gh; c++) {
+		w[c] = o2_on ? clampf(o2[c], 0.0f, 1.0f) : 0.0f;
+	}
+	return out;
+}
+
+float SimCore::get_o2_at(Vector2 pos) const {
+	return o2_on && gw > 0 ? o2[nutrient_index(pos.x, pos.y)] : 0.0f;
+}
+
+float SimCore::get_o2_mean() const {
+	if (!o2_on) {
+		return 0.0f;
+	}
+	double sum = 0.0;
+	int n = 0;
+	for (int j = 0; j < gh; j++) {
+		for (int i = 0; i < gw; i++) {
+			if (inside_dish((i + 0.5f) * cell, (j + 0.5f) * cell, 0.0f)) {
+				sum += o2[j * gw + i];
+				n++;
+			}
+		}
+	}
+	return n ? (float)(sum / n) : 0.0f;
+}
+
+float SimCore::get_o2_share(float above) const {
+	if (!o2_on) {
+		return 0.0f;
+	}
+	int hit = 0, n = 0;
+	for (int j = 0; j < gh; j++) {
+		for (int i = 0; i < gw; i++) {
+			if (inside_dish((i + 0.5f) * cell, (j + 0.5f) * cell, 0.0f)) {
+				hit += o2[j * gw + i] > above ? 1 : 0;
+				n++;
+			}
+		}
+	}
+	return n ? (float)hit / (float)n : 0.0f;
+}
+
 Dictionary SimCore::get_stats() const {
 	Dictionary d;
 	Array per;
@@ -5563,6 +5859,8 @@ Dictionary SimCore::get_stats() const {
 		s["burn_total"] = S.burn_total;
 		s["burn_temp"] = S.burn_temp;
 		s["burn_acid"] = S.burn_acid;
+		s["o2"] = S.deaths_o2;
+		s["burn_o2"] = S.burn_o2;
 		per.push_back(s);
 	}
 	double e_org = 0.0, e_alg = 0.0, e_sh = 0.0, e_nut = 0.0;
@@ -5588,6 +5886,11 @@ Dictionary SimCore::get_stats() const {
 	d["energy_algae"] = e_alg;
 	d["energy_shells"] = e_sh;
 	d["energy_nutrient"] = e_nut;
+	if (o2_on) {
+		d["o2_mean"] = get_o2_mean();
+		d["o2_made"] = o2_made;
+		d["o2_breathed"] = o2_breathed;
+	}
 	return d;
 }
 
@@ -5711,6 +6014,13 @@ void SimCore::_bind_methods() {
 	ClassDB::bind_method(D_METHOD("add_species", "params"), &SimCore::add_species);
 	ClassDB::bind_method(D_METHOD("set_dish", "center", "radius"), &SimCore::set_dish);
 	ClassDB::bind_method(D_METHOD("add_light", "pos", "radius", "power"), &SimCore::add_light);
+	ClassDB::bind_method(D_METHOD("add_light_band", "y_full", "y_dark", "power"), &SimCore::add_light_band);
+	ClassDB::bind_method(D_METHOD("set_oxygen", "params"), &SimCore::set_oxygen);
+	ClassDB::bind_method(D_METHOD("add_iron", "pos", "radius", "seconds"), &SimCore::add_iron);
+	ClassDB::bind_method(D_METHOD("get_o2_field"), &SimCore::get_o2_field);
+	ClassDB::bind_method(D_METHOD("get_o2_at", "pos"), &SimCore::get_o2_at);
+	ClassDB::bind_method(D_METHOD("get_o2_mean"), &SimCore::get_o2_mean);
+	ClassDB::bind_method(D_METHOD("get_o2_share", "above"), &SimCore::get_o2_share);
 	ClassDB::bind_method(D_METHOD("set_base_environment", "params"), &SimCore::set_base_environment);
 	ClassDB::bind_method(D_METHOD("add_zone", "params"), &SimCore::add_zone);
 	ClassDB::bind_method(D_METHOD("get_zones"), &SimCore::get_zones);
