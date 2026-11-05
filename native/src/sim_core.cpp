@@ -2965,7 +2965,31 @@ void SimCore::step(float dt) {
 			dirx += fx / d * S.cohesion;
 			diry += fy / d * S.cohesion;
 		}
-		wander[i] += gauss() * (hungry_wander ? 0.4f : 0.9f) * dt;
+		if (!walls.empty() && act == ACT_WANDER) {
+			// Chapter 7, among the ice: run and tumble, as a real bacterium
+			// does: straight on for a few seconds, then off in a new
+			// direction; turning away before it runs into ice. (The open
+			// water of earlier chapters keeps its old meander.)
+			if (randf() < dt / 5.0f) {
+				wander[i] = rand_range(0.0f, TAU);
+			}
+			float cx = std::cos(wander[i]), cy = std::sin(wander[i]);
+			if (sight_blocked(x[i], y[i], x[i] + cx * 45.0f, y[i] + cy * 45.0f)) {
+				for (int tries = 0; tries < 8; tries++) {
+					float a = wander[i] + (randf() < 0.5f ? -1.0f : 1.0f) * rand_range(0.8f, 2.8f);
+					if (!sight_blocked(x[i], y[i], x[i] + std::cos(a) * 45.0f, y[i] + std::sin(a) * 45.0f)) {
+						wander[i] = a;
+						break;
+					}
+				}
+				cx = std::cos(wander[i]);
+				cy = std::sin(wander[i]);
+			}
+			dirx = cx;
+			diry = cy;
+		} else {
+			wander[i] += gauss() * (hungry_wander ? 0.4f : 0.9f) * dt;
+		}
 		float dl = std::sqrt(dirx * dirx + diry * diry) + 1e-5f;
 		// Algae thickets are a refuge: big bodies push through them slowly,
 		// small grazers slip between the clumps.
@@ -3122,7 +3146,7 @@ void SimCore::step(float dt) {
 		}
 		// Feeding.
 		bool touching_food = false;
-		if (food >= 0 && act != ACT_GRAZE && act != ACT_FLEE && act != ACT_HUNT) {
+		if (food >= 0 && act != ACT_GRAZE && act != ACT_FLEE && act != ACT_HUNT && act != ACT_SPORE) { // (a spore eats nothing)
 			// Food under its nose is eaten automatically (more slowly).
 			float dx = al_x[food] - x[i], dy = al_y[food] - y[i];
 			float reach = body_r + algae_radius(al_e[food]) + 3.0f;

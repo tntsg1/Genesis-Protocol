@@ -83,9 +83,10 @@ func _initialize() -> void:
 			plans.append(["芽孢卡", _design(l, [2.0, 2.0, 1, 1, 3.0, 3.0, 4, 3], sp_cards, org)])
 			if id == "7-5":
 				var both: Array = (LevelsCh7.HOME_DECK as Array).duplicate(true)
+				both.remove_at(1) # (the flee card: room for the spore pair in 6 slots)
 				both.insert(0, R.card(R.C_NIGHT, 0.0, R.C_NONE, 0.0, R.A_TO_SPORE))
 				both.append(wake)
-				plans.append(["记忆+芽孢", _design(l, [2.0, 2.0, 1, 1, 3.0, 3.0, 4, 3], both, org)])
+				plans.append(["记忆+芽孢", _design(l, [2.0, 2.0, 1, 1, 3.0, 3.0, 5, 3], both, org)])
 		"7-3":
 			for lf in [0.6, 1.0, 1.6]:
 				for g in [[2.0, 2.0, 1, 1, 2.0, 4.0, 3, 3], [2.0, 2.0, 1, 1, 4.0, 3.0, 3, 3]]:
