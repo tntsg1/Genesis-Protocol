@@ -6,8 +6,11 @@ func _env(key: String, d: float) -> float:
 	return float(OS.get_environment(key)) if OS.get_environment(key) != "" else d
 
 
-func _design(l: Dictionary, genes: Array, deck: Array, organs: Array, resp := -1, color := Color(0.5, 0.8, 0.9)) -> Dictionary:
-	var d := LevelEval.design_from_genes(genes, deck, color, 12.0, true, organs, l.id)
+func _design(l: Dictionary, genes: Array, deck: Array, organs: Array, resp := -1, color := Color(0.5, 0.8, 0.9), life := 1.0) -> Dictionary:
+	var d := LevelEval.design_from_genes(genes, deck, color, float(l.get("temp_fixed", 12.0)), true, organs, l.id)
+	d.params.life = life
+	d.params.lifespan = float(d.params.lifespan) * life
+	d.params.slow_divide = 1.0 + 0.4 * (life - 1.0) if life >= 1.0 else 1.0 - 0.4 * (1.0 - life)
 	d.params.resp = resp if resp >= 0 else int(l.get("resp", 0))
 	d.params.name = "设计"
 	if l.get("resp_open", false):
@@ -65,6 +68,33 @@ func _initialize() -> void:
 			var dz := _design(l, [2.0, 2.0, 1, 1, 4.0, 3.0, 3, 3], aero, [], 2)
 			dz.plan = iron
 			plans.append(["繁殖4+一直撒铁粉", dz])
+		"7-1":
+			var home: Array = (LevelsCh7.HOME_DECK as Array).duplicate(true)
+			for g in [[2.0, 2.0, 1, 1, 3.0, 3.0, 4, 3], [3.0, 2.0, 1, 1, 3.0, 3.0, 4, 3]]:
+				plans.append(["默认卡 %s" % str(g.slice(0, 6)), _design(l, g, base, ["memory"])])
+				plans.append(["记忆卡 %s" % str(g.slice(0, 6)), _design(l, g, home, ["memory"])])
+		"7-2", "7-5":
+			var sp_cards := [R.card(R.C_NIGHT, 0.0, R.C_NONE, 0.0, R.A_TO_SPORE)] + base
+			var wake := R.card(R.C_DAY, 0.0, R.C_NONE, 0.0, R.A_TO_FORAGE)
+			wake.st = R.S_SPORE
+			sp_cards.append(wake)
+			var org := ["spore"] if id == "7-2" else ["spore", "memory"]
+			plans.append(["不用芽孢", _design(l, [2.0, 2.0, 1, 1, 3.0, 3.0, 4, 3], base, org)])
+			plans.append(["芽孢卡", _design(l, [2.0, 2.0, 1, 1, 3.0, 3.0, 4, 3], sp_cards, org)])
+			if id == "7-5":
+				var both: Array = (LevelsCh7.HOME_DECK as Array).duplicate(true)
+				both.insert(0, R.card(R.C_NIGHT, 0.0, R.C_NONE, 0.0, R.A_TO_SPORE))
+				both.append(wake)
+				plans.append(["记忆+芽孢", _design(l, [2.0, 2.0, 1, 1, 3.0, 3.0, 4, 3], both, org)])
+		"7-3":
+			for lf in [0.6, 1.0, 1.6]:
+				for g in [[2.0, 2.0, 1, 1, 2.0, 4.0, 3, 3], [2.0, 2.0, 1, 1, 4.0, 3.0, 3, 3]]:
+					plans.append(["寿命 %.1f %s" % [lf, str(g.slice(0, 6))], _design(l, g, base, [], -1, Color(0.5, 0.8, 0.9), lf)])
+		"7-4":
+			var roam := [base[0], base[1], base[2]]
+			plans.append(["默认", _design(l, [2.0, 2.0, 1, 1, 3.0, 3.0, 3, 3], base, [])])
+			plans.append(["不休息", _design(l, [2.0, 2.0, 1, 1, 3.0, 3.0, 3, 3], roam, [])])
+			plans.append(["快 不休息", _design(l, [3.0, 3.0, 1, 1, 2.0, 2.0, 3, 3], roam, [])])
 		"6-4":
 			for r in [[2, 2], [1, 2], [3, 3]]:
 				var a := _slot(l, 0)
@@ -87,6 +117,15 @@ func _initialize() -> void:
 			if sim and gs >= 0 and id in ["6-4", "6-5"]:
 				var st2: Dictionary = sim.get_stats().species[gs]
 				diag += " 采集者死因 饿%d 被吃%d 老%d 氧%d 生%d" % [int(st2.starved), int(st2.eaten), int(st2.aged), int(st2.o2), int(st2.births)]
+			if id.begins_with("7-") and sim:
+				var stc: Dictionary = sim.get_stats().species[ev.sp]
+				diag += " 饿%d 冻%d 被吃%d 老%d 生%d" % [int(stc.starved), int(stc.temp), int(stc.eaten), int(stc.aged), int(stc.births)]
+				if id == "7-2":
+					diag += " 夜%d" % ev.dawns
+				if id == "7-4":
+					diag += " 季%s" % str(ev.season_counts)
+				if id == "7-5":
+					diag += " 虫%.0f%%%s 过%d" % [float(ev.helio.get("energy_frac", 0.0)) * 100.0, "死" if ev.helio.get("dead", false) else "", ev.passed]
 			if l.has("net"):
 				diag += " 网%.0f%%(峰%.0f%%) 达成%ds 吃%d" % [ev.net_cov * 100, ev.net_cov_peak * 100, int(ev.net_done), ev.net_caught]
 			res[k] = [ev.stars(), ev.alive, ev.alive2, ev.alive3, ev.o2_mean, ev.held.duplicate(), ev.extinct, ev.t, diag], seeds)

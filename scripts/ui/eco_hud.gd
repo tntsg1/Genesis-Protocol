@@ -652,6 +652,8 @@ func ping_action(action: String) -> void:
 	# (Chapter 6's iron dust answers to the phage's key.)
 	if action == "phage" and dock_buttons.has("iron") and (dock_buttons["iron"] as Control).visible:
 		action = "iron"
+	if action == "heat" and dock_buttons.has("brine") and (dock_buttons["brine"] as Control).visible:
+		action = "brine"
 	if dock_buttons.has(action):
 		dock_buttons[action].ping()
 	var speeds := {pause = 0.0}

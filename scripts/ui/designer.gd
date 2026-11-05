@@ -2519,7 +2519,7 @@ class LifeSlider extends Control:
 
 	# What dividing costs at a life of `v` (×1 at ×1): dearer for a long life.
 	static func divide_cost(v: float) -> float:
-		return 1.0 + 0.7 * (v - 1.0) if v >= 1.0 else 1.0 - 0.4 * (1.0 - v)
+		return 1.0 + 0.4 * (v - 1.0) if v >= 1.0 else 1.0 - 0.4 * (1.0 - v)
 
 	func _init(v: float) -> void:
 		value = v

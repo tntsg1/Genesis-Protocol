@@ -28,6 +28,7 @@ var env_layer := 0
 var o2_world := false # chapter 6: this world has oxygen (O2Layer, environment layer 4)
 var net_world := false # chapter 6 boss: the pseudopod net (O2Layer draws it too)
 var o2_layer: O2Layer
+var ice_layer: IceLayer # chapter 7: the ice and the heliozoan
 var env_amount := 0.0
 var zone_labels: Node2D
 var _zone_zoom := 0.0
@@ -199,6 +200,7 @@ const ARCHETYPES := [
 
 
 var night: NightMode # night mode over everything (scripts/night_mode.gd)
+var night_phase := false # chapter 7: night mode follows the long night
 
 
 func _ready() -> void:
@@ -261,12 +263,15 @@ func load_world(cfg: Dictionary, world_seed := -1) -> void:
 	build_world(cfg)
 	# Night mode on its own in the seabed levels (setting "auto").
 	NightMode.auto_on = bool(cfg.get("night", false))
+	night_phase = bool(cfg.get("night_phase", false))
 	o2_world = cfg.has("oxygen")
 	net_world = false
 	if not o2_world and env_layer == 4:
 		set_env_layer(0)
 	if o2_layer:
 		o2_layer.reset()
+	if ice_layer:
+		ice_layer.reset()
 	acc = 0.0
 	iv.reset(60.0)
 	nutrient_img = _field_image(sim.get_nutrient_field())
@@ -482,6 +487,9 @@ func _build_view() -> void:
 	o2_layer = O2Layer.new()
 	o2_layer.host = self
 	add_child(o2_layer)
+	ice_layer = IceLayer.new()
+	ice_layer.host = self
+	ice_layer.visible = false
 
 	var quad := QuadMesh.new()
 	quad.size = Vector2(1, 1)
@@ -507,6 +515,8 @@ func _build_view() -> void:
 	slug_layer.host = self
 	add_child(slug_layer)
 	add_child(cells)
+	if ice_layer:
+		add_child(ice_layer)
 
 	analysis = AnalysisLayer.new()
 	add_child(analysis)
@@ -705,6 +715,9 @@ func _process(delta: float) -> void:
 	env_amount = move_toward(env_amount, 1.0 if analyzing and env_layer > 0 and env_layer < 4 else 0.0, delta / Ui.T_MID)
 	if o2_layer:
 		o2_layer.tick(delta)
+	# Chapter 7 (Q241): night mode on its own only while the long night lasts.
+	if night_phase:
+		NightMode.auto_on = sim.get_night()
 	dish_mat.set_shader_parameter("env_amount", env_amount)
 	if (env_amount > 0.0 or env_layer > 0) and env_layer < 4:
 		dish_mat.set_shader_parameter("env_layer", env_layer)
@@ -1056,6 +1069,10 @@ func _draw_overlay() -> void:
 				r = 30.0
 				col = Color(0.72, 0.36, 0.2)
 				text = "撒铁粉"
+			"brine":
+				r = 30.0
+				col = Color(0.55, 0.78, 0.95)
+				text = "撒盐"
 		var spin := Time.get_ticks_msec() / 1000.0 * 0.8
 		for k in 24:
 			var a0 := spin + TAU * k / 24.0
@@ -1174,7 +1191,7 @@ func focus(pos: Vector2, zoom: float) -> void:
 func dock_action(key: String) -> void:
 	match key:
 		"observe": set_observe(not observing)
-		"nutrient", "membrane", "heat", "current", "phage", "irritant", "iron": iv.select(key)
+		"nutrient", "membrane", "heat", "current", "phage", "irritant", "iron", "brine": iv.select(key)
 		"track": toggle_track()
 		"report": open_report()
 		"designer": open_designer()
@@ -1827,7 +1844,7 @@ func _unhandled_input(event: InputEvent) -> void:
 				elif left_down and not left_dragged:
 					var at := _event_world(mb.position)
 					pointer.click(mb.position)
-					if mode in ["nutrient", "heat", "phage", "irritant", "iron"]:
+					if mode in ["nutrient", "heat", "phage", "irritant", "iron", "brine"]:
 						iv.place(mode, at)
 					elif mode == "release":
 						_do_release(at)

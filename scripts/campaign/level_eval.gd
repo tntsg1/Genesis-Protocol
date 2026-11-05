@@ -16,6 +16,11 @@ var o2_mean := 0.0 # chapter 6: the dish's mean oxygen (0..1)
 var held: Array = [] # 6-1: the player's cells at each spring
 var o2_dead := 0 # 6-3: the second species' cells poisoned by oxygen
 var net_cov := 0.0 # 6-5: the share of the dish under the pseudopod net
+var dawns := 0 # chapter 7: long nights come through
+var _was_night := false
+var season_counts: Array = [] # 7-4: in the bloom at each season's end
+var helio := {} # 7-5
+var passed := 0 # 7-5: cells through to the far side
 var net_cov_peak := 0.0
 var net_low_since := -1.0 # since when it has been held under the goal (or -1)
 var net_caught := 0
@@ -123,6 +128,26 @@ func observe(sim: SimCore, time: float) -> void:
 					net_done = t
 			else:
 				net_low_since = -1.0
+	# Chapter 7: a night come through (the dawn after it).
+	var now_night := sim.get_night()
+	if _was_night and not now_night:
+		dawns += 1
+		if level.goal.kind == "nights" and dawns >= int(level.goal.nights) and not goal_met and alive >= int(level.goal.n):
+			goal_met = true
+			goal_time = t
+	_was_night = now_night
+	if level.goal.kind == "seasons":
+		var ends: Array = level.goal.ends
+		while season_counts.size() < ends.size() and t >= float(ends[season_counts.size()][0]):
+			var se: Array = ends[season_counts.size()]
+			season_counts.append(count_in(sim, sp, {center = se[1], radius = float(se[2])}))
+	if level.has("helio"):
+		helio = sim.get_helio()
+		if level.goal.kind == "helio":
+			passed = count_in(sim, sp, level.goal.zone)
+			if not goal_met and alive > 0 and (bool(helio.get("dead", false)) or passed >= int(level.goal.n)):
+				goal_met = true
+				goal_time = t
 	if level.world.has("oxygen"):
 		o2_mean = sim.get_o2_mean()
 		if sp2 >= 0:
@@ -301,6 +326,10 @@ func finish() -> void:
 	if g.kind == "coexist3" and not extinct and alive >= int(g.n) and alive2 >= int(g.n2) and alive3 >= int(g.n3):
 		goal_met = true
 		goal_time = t
+	# Chapter 7 (7-4): enough in the bloom at every season's end.
+	if g.kind == "seasons" and not extinct and season_counts.size() >= (g.ends as Array).size() and season_counts.all(func(v: int) -> bool: return v >= int(g.n)):
+		goal_met = true
+		goal_time = t
 	# Chapter 6: the water's mean oxygen at the end (6-3).
 	if g.kind == "o2_end" and not extinct and o2_mean >= float(g.frac):
 		goal_met = true
@@ -398,6 +427,10 @@ func challenge_met() -> bool:
 			return not extinct and o2_mean >= float(ch.frac)
 		"alive_b":
 			return not extinct and alive2 >= int(ch.n)
+		"helio_by":
+			return not extinct and goal_met and goal_time <= float(ch.seconds)
+		"never_frozen":
+			return not extinct and _sim != null and int(_sim.get_stats().species[sp].temp) <= int(ch.n)
 		"net_push_by":
 			return not extinct and net_done >= 0.0 and net_done <= float(ch.seconds)
 		"o2_deaths_max":
@@ -500,6 +533,8 @@ static func prepare(l: Dictionary, design: Dictionary, seed: int, threads := 8) 
 		start_slug(sim, l, n)
 	if l.has("net"):
 		sim.set_net(l.net)
+	if l.has("helio"):
+		sim.set_helio(l.helio)
 	if l.has("colony"):
 		sim.set_colony(l.colony)
 		ev.blocks_used = (design.params.get("blocks", []) as Array).size()
@@ -636,6 +671,34 @@ static func tick_events(l: Dictionary, sim: SimCore, t0: float, t1: float, fired
 	for k in l.get("events", []).size():
 		var e: Dictionary = l.events[k]
 		match e.kind:
+			"cycle":
+				# Chapter 7: day, then the long night (dark, frozen), over and over.
+				var per := float(e.day) + float(e.night)
+				var ph := fposmod(t1 - float(e.get("offset", 0.0)), per)
+				var dark := ph >= float(e.day)
+				var nth := int(floor((t1 - float(e.get("offset", 0.0))) / per))
+				if not dark and ph >= float(e.day) - 10.0 and not fired.has("%d_warn%d" % [k, nth]):
+					fired["%d_warn%d" % [k, nth]] = true
+					said.append({text = "长夜 10 秒后到来：光会消失，水会结冰"})
+				if dark != bool(fired.get("%d_dark" % k, false)):
+					fired["%d_dark" % k] = dark
+					sim.set_night(dark)
+					sim.set_light_scale(float(e.get("night_light", 0.03)) if dark else 1.0)
+					sim.set_base_environment({temp = float(e.cold) if dark else float(e.warm)})
+					said.append({text = "长夜来了：全暗，水温降到 %d°C" % int(e.cold) if dark else "天亮了：水温回到 %d°C" % int(e.warm)})
+			"seasons":
+				# Chapter 7 (7-4): the bloom moves on with the season.
+				for w in e.list.size():
+					var se: Dictionary = e.list[w]
+					if t1 >= float(se.at) - 12.0 and not fired.has("%d_s%dw" % [k, w]) and w > 0:
+						fired["%d_s%dw" % [k, w]] = true
+						said.append({text = "季节要变了：12 秒后雪藻会在别处长出来", pos = se.pos})
+					if t1 >= float(se.at) and not fired.has("%d_s%d" % [k, w]):
+						fired["%d_s%d" % [k, w]] = true
+						sim.light_pulse(se.pos, float(se.radius), float(se.power), float(se.seconds))
+						sim.add_algae_patch(se.pos, float(se.radius) * 0.6, int(se.get("n", 40)), 20.0)
+						if w > 0:
+							said.append({text = "新的季节：雪藻在这里长了出来", pos = se.pos})
 			"chill":
 				var at := float(e.at)
 				var end := at + float(e.over)

@@ -2562,6 +2562,15 @@ void SimCore::step(float dt) {
 					peer_to = -1;
 				}
 			}
+			// Chapter 7: remembering takes no time: the spot is kept and the deck
+			// reads on (a card to remember at home must not hold the cell there).
+			if (cd.act == A_REMEMBER) {
+				if (chosen < 0 && card_holds(i, cd)) {
+					mem_x[i] = x[i];
+					mem_y[i] = y[i];
+				}
+				continue;
+			}
 			bool can = peer_card ? peer_to >= 0 : (act_possible(i, cd.act) || smell_flee);
 			if (chosen < 0 && card_holds(i, cd) && can) {
 				// Prey conditions hold for one prey together, and that is
@@ -2852,29 +2861,46 @@ void SimCore::step(float dt) {
 				want = 0.2f;
 				break;
 			case A_RETURN: {
-				// Straight for it; where the ice is in the way, along the ice
-				// (whichever way along it leads nearer).
+				// Straight for it while nothing is in the way; where ice is,
+				// round the end of that wall nearer the way home (a waypoint
+				// just past its end), then straight on again.
 				float dx = mem_x[i] - x[i], dy = mem_y[i] - y[i];
 				float d = std::max(1e-3f, std::sqrt(dx * dx + dy * dy));
 				dirx = dx / d;
 				diry = dy / d;
-				const float probe = 36.0f;
-				for (const Barrier &w : walls) {
-					float ex = w.bx - w.ax, ey = w.by - w.ay;
-					float l2 = std::max(ex * ex + ey * ey, 1e-3f);
-					float tt = clampf(((x[i] - w.ax) * ex + (y[i] - w.ay) * ey) / l2, 0.0f, 1.0f);
-					float qx = w.ax + ex * tt - x[i], qy = w.ay + ey * tt - y[i];
-					if (qx * qx + qy * qy < probe * probe && qx * dirx + qy * diry > 0.0f) {
-						float l = std::sqrt(l2);
-						float tx = ex / l, ty = ey / l;
-						if (tx * dirx + ty * diry < 0.0f) {
-							tx = -tx;
-							ty = -ty;
-						}
-						dirx = tx;
-						diry = ty;
-						break;
+				int hit = -1;
+				float best_t = 2.0f;
+				for (int w = 0; w < (int)walls.size(); w++) {
+					const Barrier &b = walls[w];
+					const float sx = b.bx - b.ax, sy = b.by - b.ay;
+					const float den = dx * sy - dy * sx;
+					if (std::abs(den) < 1e-6f) {
+						continue;
 					}
+					const float qx = b.ax - x[i], qy = b.ay - y[i];
+					const float t = (qx * sy - qy * sx) / den;
+					const float u = (qx * dy - qy * dx) / den;
+					if (t > 0.0f && t < best_t && u >= 0.0f && u <= 1.0f) {
+						best_t = t;
+						hit = w;
+					}
+				}
+				if (hit >= 0) {
+					const Barrier &b = walls[hit];
+					float e1x = b.ax, e1y = b.ay, e2x = b.bx, e2y = b.by;
+					auto score = [&](float ex, float ey) {
+						return std::hypot(ex - x[i], ey - y[i]) + std::hypot(mem_x[i] - ex, mem_y[i] - ey);
+					};
+					bool first = score(e1x, e1y) <= score(e2x, e2y);
+					float ex = first ? e1x : e2x, ey = first ? e1y : e2y;
+					float ox = first ? e2x : e1x, oy = first ? e2y : e1y;
+					float ux = ex - ox, uy = ey - oy;
+					float ul = std::max(1e-3f, std::sqrt(ux * ux + uy * uy));
+					float wx = ex + ux / ul * 40.0f, wy = ey + uy / ul * 40.0f;
+					float vx2 = wx - x[i], vy2 = wy - y[i];
+					float vl = std::max(1e-3f, std::sqrt(vx2 * vx2 + vy2 * vy2));
+					dirx = vx2 / vl;
+					diry = vy2 / vl;
 				}
 				wander[i] = std::atan2(diry, dirx);
 				want = clampf(d / 60.0f, 0.25f, 0.9f);
@@ -6202,8 +6228,10 @@ void SimCore::step_helio(float dt) {
 		return;
 	}
 	// It burns all the while; nothing caught for long enough, it starves.
-	H.energy -= H.burn * dt;
-	energy_out += H.burn * dt;
+	// (The long night's cold costs it twice as much.)
+	const float hb = H.burn * (night_now ? 2.0f : 1.0f);
+	H.energy -= hb * dt;
+	energy_out += hb * dt;
 	if (H.energy <= 0.0f) {
 		H.energy = 0.0f;
 		H.dead = true;

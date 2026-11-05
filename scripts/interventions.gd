@@ -22,8 +22,11 @@ const SPECS := {
 	phage = {name = "投放病毒", cost = 30.0, cool = 10.0, opens = 18},
 	irritant = {name = "刺激头冠", cost = 30.0, cool = 8.0, opens = 24},
 	iron = {name = "撒铁粉", cost = 35.0, cool = 8.0, opens = 27},
+	brine = {name = "撒盐", cost = 35.0, cool = 8.0, opens = 31},
 }
-const ORDER := ["nutrient", "membrane", "heat", "current", "phage", "irritant", "iron"]
+const ORDER := ["nutrient", "membrane", "heat", "current", "phage", "irritant", "iron", "brine"]
+const BRINE_R := 170.0 # chapter 7: salt keeps the water there from freezing (sea-ice brine channels)
+const BRINE_TIME := 60.0
 const IRON_R := 220.0 # chapter 6: iron dust soaks up the oxygen here (banded iron formations)
 const IRON_TIME := 40.0
 const IRRITANT_REACH := 170.0 # how near its head a drop must land (µm)
@@ -105,6 +108,8 @@ func tick(sim_dt: float) -> void:
 func slot_kind(kind: String) -> String:
 	if kind == "phage" and open_here("iron"):
 		return "iron"
+	if kind == "heat" and open_here("brine"):
+		return "brine"
 	return "irritant" if kind == "current" and open_here("irritant") else kind
 
 
@@ -135,6 +140,7 @@ func _hint(kind: String) -> void:
 		"current": t = "按住拖出洋流的方向和力度，持续 30 秒（%d 点）　·　右键 / Esc 取消" % int(SPECS.current.cost)
 		"phage": t = "点击投放一团病毒（%d 点）　·　右键 / Esc 取消" % int(SPECS.phage.cost)
 		"irritant": t = "点喷口守卫的头部，放一小团刺激物：头冠缩回约 6 秒（%d 点）　·　右键 / Esc 取消" % int(SPECS.irritant.cost)
+		"brine": t = "点击撒一片盐：60 秒内那里的水不会结冰（%d 点）　·　右键 / Esc 取消" % int(SPECS.brine.cost)
 		"iron": t = "点击撒一片铁粉：40 秒内吸掉那里的氧气（%d 点）　·　右键 / Esc 取消" % int(SPECS.iron.cost)
 	host.hud_root.show_hint(t)
 
@@ -212,6 +218,10 @@ func place(kind: String, at: Vector2) -> void:
 				host.level_runner.eval.shot_times.append(host.level_runner.eval.t)
 			host.hud_root._event("投放了一团病毒", Ui.ACCENT, at)
 			Audio.sfx("nutrient", -4.0, 0.7)
+		"brine":
+			host.sim.add_brine(at, BRINE_R, 22.0, BRINE_TIME)
+			host.hud_root._event("撒下盐：这片水 60 秒内不会结冰", BRINE_COL, at)
+			Audio.sfx("nutrient", -4.0, 1.1)
 		"iron":
 			host.sim.add_iron(at, IRON_R, IRON_TIME)
 			host.hud_root._event("撒下铁粉：这片水的氧气会被吸掉", IRON_COL, at)
@@ -256,6 +266,18 @@ func draw(o: Node2D, zoom: float) -> void:
 				var mid: Vector2 = (iv.a + iv.b) * 0.5
 				var n: Vector2 = (iv.b - iv.a).orthogonal().normalized()
 				_label(o, mid + n * 16.0 * px, "隔离膜 · %ds" % left, Ui.ACCENT, f, zoom)
+			"brine":
+				var c: Vector2 = iv.center
+				var r: float = iv.radius
+				o.draw_circle(c, r, Color(BRINE_COL, 0.07 * f))
+				_dashed(o, c, r, Color(BRINE_COL, 0.75 * f), px)
+				for k in 60:
+					var a := k * 2.39996
+					var rr := r * 0.95 * sqrt(fposmod(k * 0.618 + 0.3, 1.0))
+					var q := c + Vector2.from_angle(a) * rr
+					var sz := (1.6 + fposmod(k * 0.41, 1.0) * 1.4) * px * 1.5
+					o.draw_rect(Rect2(q - Vector2(sz, sz), Vector2(sz, sz) * 2.0), Color(BRINE_COL.lightened(0.4), 0.7 * f))
+				_label(o, c + Vector2(0, -r - 12.0 * px), "盐水 · 不结冰 · %ds" % left, BRINE_COL.darkened(0.2), f, zoom)
 			"warm", "cold":
 				var c: Vector2 = iv.center
 				var r: float = iv.radius
@@ -317,12 +339,16 @@ func draw(o: Node2D, zoom: float) -> void:
 			_label(o, drag_to + Vector2(0, -16) * px, "%d µm/s" % int(d.length() / 260.0 * 70.0), Ui.ACCENT, 1.0, zoom)
 		return
 	_irritant(o, zoom, px, t)
-	if host.mode in ["nutrient", "heat", "membrane", "current", "phage", "irritant", "iron"] and host.pointer:
+	if host.mode in ["nutrient", "heat", "membrane", "current", "phage", "irritant", "iron", "brine"] and host.pointer:
 		var at: Vector2 = host.get_viewport().get_canvas_transform().affine_inverse() * host.pointer.pos
 		match host.mode:
 			"nutrient":
 				_dashed(o, at, 45.0, Color(Ui.ACCENT, 0.8), px)
 				o.draw_circle(at, 45.0, Color(Ui.ACCENT, 0.06))
+			"brine":
+				_dashed(o, at, BRINE_R, Color(BRINE_COL, 0.8), px)
+				o.draw_circle(at, BRINE_R, Color(BRINE_COL, 0.05))
+				_label(o, at + Vector2(0, -BRINE_R - 12.0 * px), "撒盐 · 60 秒不结冰", BRINE_COL.darkened(0.2), 1.0, zoom)
 			"iron":
 				_dashed(o, at, IRON_R, Color(IRON_COL, 0.8), px)
 				o.draw_circle(at, IRON_R, Color(IRON_COL, 0.05))
@@ -355,6 +381,7 @@ func draw(o: Node2D, zoom: float) -> void:
 
 const IRRITANT_COL := Color(0.86, 0.62, 0.2)
 const IRON_COL := Color(0.72, 0.36, 0.2)
+const BRINE_COL := Color(0.55, 0.78, 0.95)
 
 
 # The guardian's head (its corona), or INF without one.

@@ -527,7 +527,7 @@ func _fill_card(l: Dictionary) -> void:
 		_row(grid, "开放基因", "、".join(names), null)
 	var iv := []
 	for k: String in l.interventions:
-		iv.append("局部升温" if l.id in ["2-1", "2-2", "2-3", "2-4", "2-5", "5-1"] and k == "heat" else {nutrient = "营养投放", membrane = "隔离膜", heat = "局部升降温", current = "洋流引导", phage = "投放病毒", irritant = "刺激头冠", iron = "撒铁粉"}.get(k, k))
+		iv.append("局部升温" if l.id in ["2-1", "2-2", "2-3", "2-4", "2-5", "5-1"] and k == "heat" else {nutrient = "营养投放", membrane = "隔离膜", heat = "局部升降温", current = "洋流引导", phage = "投放病毒", irritant = "刺激头冠", iron = "撒铁粉", brine = "撒盐"}.get(k, k))
 	_row(grid, "可用干预", "、".join(iv), null)
 	_row(grid, "已知情况", "\n".join(l.threats), null)
 	_rule()

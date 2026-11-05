@@ -19,6 +19,8 @@ extends RefCounted
 #                 (CampaignSave.look: their name and colour, the level's numbers)
 #   light_band    [y_full, y_dark, power]: light from above (chapter 6)
 #   oxygen        SimCore.set_oxygen params (chapter 6)
+#   walls         [[a, b], ...]: ice nothing crosses or sees through (chapter 7)
+#   divide_min_temp  colder water than this, no dividing (chapter 7)
 
 const AQUA := Color(0.42, 0.8, 0.88)
 const HONEY := Color(0.96, 0.76, 0.4)
@@ -123,6 +125,12 @@ static func populate(sim: SimCore, cfg: Dictionary, on_species: Callable) -> voi
 	Ecology.apply(sim, layout)
 	if cfg.has("oxygen"):
 		sim.set_oxygen(cfg.oxygen)
+	for pa: Array in cfg.get("algae_patches", []): # [[pos, radius, n, each]]: ready-grown food
+		sim.add_algae_patch(pa[0], float(pa[1]), int(pa[2]), float(pa[3]))
+	for w: Array in cfg.get("walls", []):
+		sim.add_wall(w[0], w[1])
+	if cfg.has("divide_min_temp"):
+		sim.set_divide_min_temp(float(cfg.divide_min_temp))
 	if cfg.get("natives", false):
 		for p: Dictionary in Natives.load_for(layout):
 			var params := p.duplicate()

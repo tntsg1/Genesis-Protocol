@@ -49,6 +49,9 @@ func start(l: Dictionary, last_design := {}, entry_at := Vector2.INF) -> void:
 	host.set_speed(1.0) # (the dish runs a moment before the designer opens: see _release)
 	host.load_world(l.world, randi() % 100000)
 	# Chapter 6 boss: the net is there from the start, to be seen before designing.
+	if l.has("helio"):
+		host.sim.set_helio(l.helio)
+		host.ice_layer.reset()
 	if l.has("net"):
 		host.sim.set_net(l.net)
 		host.net_world = true
@@ -442,6 +445,20 @@ func _update_objective(t: float) -> void:
 		if eval.net_low_since >= 0.0 and not eval.goal_met:
 			now += "　已保持 %d / %d 秒" % [int(eval.t - eval.net_low_since), int(g.hold)]
 		now += "　氧气 %.1f%%　你 %d　被网吃掉 %d" % [eval.o2_mean * 100.0, eval.alive, eval.net_caught]
+	elif g.kind == "nights":
+		ratio = clampf(float(eval.alive) / float(g.n), 0.0, 1.0)
+		now = "种群：%d / %d　已熬过长夜 %d / %d" % [eval.alive, int(g.n), eval.dawns, int(g.nights)]
+	elif g.kind == "seasons":
+		var ends: Array = g.ends
+		var k := mini(eval.season_counts.size(), ends.size() - 1)
+		var cur: Array = ends[k]
+		var inn := LevelEval.count_in(host.sim, eval.sp, {center = cur[1], radius = float(cur[2])})
+		ratio = clampf(float(inn) / float(g.n), 0.0, 1.0)
+		now = "第 %d / %d 季　雪藻带里：%d / %d　季末还有 %d 秒" % [k + 1, ends.size(), inn, int(g.n), maxi(0, ceili(float(cur[0]) - eval.t))]
+	elif g.kind == "helio":
+		var hf := float(eval.helio.get("energy_frac", 0.0))
+		ratio = maxf(clampf(1.0 - hf, 0.0, 1.0), clampf(float(eval.passed) / float(g.n), 0.0, 1.0))
+		now = "太阳虫能量 %d%%　闯过去：%d / %d　你 %d　被吃 %d" % [roundi(hf * 100.0), eval.passed, int(g.n), eval.alive, int(eval.helio.get("eaten", 0))]
 	elif g.kind == "o2_end":
 		ratio = clampf(eval.o2_mean / float(g.frac), 0.0, 1.0)
 		now = "平均氧气：%.1f%% / %d%%" % [eval.o2_mean * 100.0, roundi(float(g.frac) * 100.0)]
@@ -452,6 +469,12 @@ func _update_objective(t: float) -> void:
 		now = "占优 %d / %d 片（近 30 秒平均，比分见地图）" % [eval.patches_won, int(g.n)]
 	# Goals judged at the end: enough now is not a pass yet (review round 3:
 	# "62/60 at 0:22 read as done").
+	# Chapter 7: the next nightfall / dawn.
+	for e: Dictionary in level.get("events", []):
+		if e.kind == "cycle":
+			var per := float(e.day) + float(e.night)
+			var ph := fposmod(t - float(e.get("offset", 0.0)), per)
+			now += "　%s %d 秒" % ["天亮还有" if ph >= float(e.day) else "天黑还有", ceili((per - ph) if ph >= float(e.day) else (float(e.day) - ph))]
 	# Chapter 6: the oxygen, and how each spring is held, beside the count.
 	if level.world.has("oxygen") and g.kind in ["alive_end", "coexist3"]:
 		now += "　氧气 %.1f%%" % (eval.o2_mean * 100.0)
