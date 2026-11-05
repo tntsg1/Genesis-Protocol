@@ -15,6 +15,11 @@ var peak3 := 0
 var o2_mean := 0.0 # chapter 6: the dish's mean oxygen (0..1)
 var held: Array = [] # 6-1: the player's cells at each spring
 var o2_dead := 0 # 6-3: the second species' cells poisoned by oxygen
+var net_cov := 0.0 # 6-5: the share of the dish under the pseudopod net
+var net_cov_peak := 0.0
+var net_low_since := -1.0 # since when it has been held under the goal (or -1)
+var net_caught := 0
+var net_done := -1.0 # when the goal was reached
 var o2_peak := 0.0
 var uses_state := false # level 8: the predator's deck switches into the challenge's state
 var peak2 := 0
@@ -103,6 +108,21 @@ func observe(sim: SimCore, time: float) -> void:
 		held.clear()
 		for c: Vector2 in level.challenge.zones:
 			held.append(count_in(sim, sp, {center = c, radius = level.challenge.radius}))
+	if level.has("net"):
+		var ns: Dictionary = sim.get_net_stats()
+		net_cov = float(ns.coverage)
+		net_cov_peak = maxf(net_cov_peak, net_cov)
+		net_caught = int(ns.caught)
+		if level.goal.kind == "net_push" and alive > 0:
+			if net_cov <= float(level.goal.frac):
+				if net_low_since < 0.0:
+					net_low_since = t
+				elif t - net_low_since >= float(level.goal.hold) and not goal_met:
+					goal_met = true
+					goal_time = t
+					net_done = t
+			else:
+				net_low_since = -1.0
 	if level.world.has("oxygen"):
 		o2_mean = sim.get_o2_mean()
 		if sp2 >= 0:
@@ -378,6 +398,8 @@ func challenge_met() -> bool:
 			return not extinct and o2_mean >= float(ch.frac)
 		"alive_b":
 			return not extinct and alive2 >= int(ch.n)
+		"net_push_by":
+			return not extinct and net_done >= 0.0 and net_done <= float(ch.seconds)
 		"o2_deaths_max":
 			return not extinct and alive2 > 0 and o2_dead <= int(ch.n)
 		"zones_held":
@@ -476,6 +498,8 @@ static func prepare(l: Dictionary, design: Dictionary, seed: int, threads := 8) 
 		start_giants(sim, l, n)
 	if l.has("slug"):
 		start_slug(sim, l, n)
+	if l.has("net"):
+		sim.set_net(l.net)
 	if l.has("colony"):
 		sim.set_colony(l.colony)
 		ev.blocks_used = (design.params.get("blocks", []) as Array).size()
@@ -549,6 +573,23 @@ static func virus_params(v: Dictionary) -> Dictionary:
 
 # The released species' parameters as the level runs them: a level may set
 # how long its cells live (`lifespan`, level 3: cold water, slow lives).
+# Chapter 6 boss: the point on the net's rim with the most oxygen.
+static func net_rim(sim: SimCore) -> Vector2:
+	var nf: PackedFloat32Array = sim.get_net_field()
+	var of: PackedFloat32Array = sim.get_o2_field()
+	var g: Vector2i = sim.get_grid_size()
+	var cell: float = sim.get_cell_size()
+	var best := -1.0
+	var at := Vector2(1100, 1100)
+	for j in range(0, g.y, 2):
+		for i in range(0, g.x, 2):
+			var c := j * g.x + i
+			if nf[c] > 0.3 and nf[c] < 0.9 and of[c] > best:
+				best = of[c]
+				at = Vector2((i + 0.5) * cell, (j + 0.5) * cell)
+	return at
+
+
 static func level_params(l: Dictionary, params: Dictionary) -> Dictionary:
 	if not l.has("lifespan") and not l.has("keep_act") and not l.has("prophage") and not params.has("blocks"):
 		return params
@@ -772,6 +813,12 @@ static func advance(run: Dictionary, step: float) -> void:
 	# across, 30 s).
 	while not run.plan.is_empty() and run.t >= float(run.plan[0].at):
 		var iv: Dictionary = run.plan.pop_front()
+		if iv.kind == "iron":
+			# Chapter 6: where the net's rim has the most oxygen (a player sees
+			# it on the oxygen map), or where the plan says.
+			sim.add_iron(iv.get("pos", net_rim(sim)), 220.0, 40.0)
+			run.eval.shots += 1
+			continue
 		if iv.kind == "phage":
 			# Where the rival is thickest (a player sees that much).
 			run.eval.shots += 1

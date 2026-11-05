@@ -205,12 +205,34 @@ const LEVELS := [
 	{
 		id = "6-5", index = 29, name = "熔岩滤食兽", en = "THE LAVA SIEVE", depth = 4.4,
 		director = SHIP_AI,
-		teach = "Boss：有孔虫伪足网",
-		open = false,
-		brief = "海床上出现了一张会慢慢扩大的黏网。",
-		ai_log = "研究日志 0029：",
-		world = {name = "星球一 · 热泉海床", layout = SEABED, lights = [], light_band = LIGHT_BAND, algae_cap = 0, algae_seed = [0, 22.0], oxygen = OXYGEN, species = []},
-		release = {at = Vector2(1100, 500), count = 30},
+		teach = "Boss：有孔虫的伪足网",
+		role = "grazer",
+		brief = "海床中央住着一只巨大的有孔虫。它躲在一个螺旋形的硬壳里，从壳上伸出成千上万条细丝，在海底织成一张越铺越大的黏网。碰到网的细胞会被粘住，慢慢消化掉。
+
+它要靠氧气呼吸。晨光丝放出的氧气越多，网就铺得越快；氧气不够的地方，它只能把伪足收回来。
+
+这一关你设计一种好氧的采集者：它们吃晨光丝，呼吸时也会消耗氧气。再配合撒铁粉，把网逼回去。",
+		ai_log = "研究日志 0029：海床中央的黏网正在扩大，已经有不少生命被它吞掉。
+
+地球上也有这样的生物。有孔虫是单细胞生物，有的能长到几厘米大，用伪足织成的网捕捉食物。",
+		world = {
+			name = "星球一 · 热泉海床",
+			layout = SEABED,
+			lights = [],
+			light_band = LIGHT_BAND,
+			algae_cap = 0,
+			algae_seed = [0, 22.0],
+			oxygen = {on = true, start = 0.12, emit = 0.02, harm = 16.0, decay = 0.0015, sulfide = 0.05, graze = 2.0},
+			species = [
+				{label = "晨光丝", role = "dawn", params = DAWN, spawn = [[Vector2(800, 380), 70, 220.0], [Vector2(1400, 380), 70, 220.0]]},
+				SULFUR_FEW,
+			],
+		},
+		net = {center = Vector2(1100, 1250), core = 70.0, radius = 380.0, need = 0.04, grow = 0.2, shrink = 0.03, drain = 0.7, slow = 0.5, use = 0.001},
+		release = {at = Vector2(1100, 380), count = 40},
+		resp = 2,
+		resp_open = true,
+		lifespan = 130.0,
 		time_limit = 360.0,
 		budget = 16, star_budget = 12,
 		genes_open = [0, 1, 4, 5],
@@ -218,10 +240,19 @@ const LEVELS := [
 		organ_slots = 1,
 		pages_open = ["genome", "rules", "library", "handbook"],
 		interventions = ["nutrient", "membrane", "current", "iron"],
-		goal = {kind = "alive_end", n = 1, text = "（还在做）"},
-		challenge = {kind = "alive_end", n = 1, text = "（还在做）"},
-		threats = [],
-		hints = [],
-		tips = [],
+		goal = {kind = "net_push", frac = 0.12, hold = 30.0, text = "把伪足网的覆盖面积压到 12% 以下，并保持 30 秒。"},
+		challenge = {kind = "net_push_by", seconds = 240.0, text = "在第 4 分钟之前完成。"},
+		threats = ["熔岩滤食兽（原型：巨型有孔虫）
+它住在海床中央，从壳里伸出细丝织成黏网。碰到网的细胞会被拖慢，再慢慢消化掉。", "
+它要靠氧气呼吸
+氧气浓度低于 4% 的地方，伪足会收回去；氧气越多，网铺得越快。", "
+你的采集者
+采集者吃晨光丝，晨光丝少了，放出的氧气也就少了。好氧呼吸也会消耗水里的氧气。", "
+撒铁粉（按 5）
+在网的边缘撒铁粉，能吸掉那里的氧气，逼伪足后退。", "
+注意：你的采集者灭绝，实验直接结束。"],
+		hints = ["网还在扩大？看看氧气图层（按 X 再按 T），是不是晨光丝放的氧太多了。", "采集者是不是一头撞进了网里？"],
+		tips = ["采集者用好氧呼吸，繁殖调高：越多，吃掉的晨光丝和用掉的氧气就越多。", "按 X 再按 T 切到「氧气」图层，在网边缘氧气最浓的地方撒铁粉。", "规则里加一张「氧气高于 X → 游向氧气」：采集者会往氧气多的地方去，把那里的氧用掉。"],
+		tutorial = true,
 	},
 ]

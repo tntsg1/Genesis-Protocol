@@ -213,6 +213,12 @@ void SimCore::setup(Vector2 world_size, int seed) {
 	enzyme.assign(gw * gh, 0.0f);
 	o2.assign(gw * gh, 0.0f);
 	o2_on = false;
+	net.assign(gw * gh, 0.0f);
+	net_tmp.assign(gw * gh, 0.0f);
+	net_on = false;
+	net_phase = 0;
+	net_fed = 0.0;
+	net_caught = 0;
 	o2_phase = 0;
 	o2_made = o2_breathed = 0.0;
 	irons.clear();
@@ -2291,6 +2297,7 @@ void SimCore::step(float dt) {
 	step_nutrients(dt);
 	step_signals(dt);
 	step_oxygen(dt);
+	step_net(dt);
 	auto t1 = clk::now();
 	step_algae(dt);
 	step_shells(dt);
@@ -2391,7 +2398,8 @@ void SimCore::step(float dt) {
 		const float vision_r = 30.0f + 24.0f * t_vision[i] + (multicell ? r * 2.0f : 0.0f);
 		// Alert swims 25% faster (its top speed, so a flat-out flight gains too).
 		const float max_speed = S.colony ? S.col_speed * (1.0f - cslow[i]) : (18.0f + 14.0f * t_speed[i]) * (1.0f - 0.04f * t_armor[i]) * (multicell ? 0.7f : 1.0f) * S.speed_mult
-				* S.motor_speed * (state[i] == S_ALERT ? 1.25f : 1.0f);
+				* S.motor_speed * (state[i] == S_ALERT ? 1.25f : 1.0f)
+				* (net_on ? 1.0f - net_slow * net_at(x[i], y[i]) : 1.0f); // (chapter 6 boss: held in the net)
 		// Division needs the split energy plus a new body for the child; an
 		// organism keeps feeding until it has both.
 		const float child_body = body_energy(sp[i]);
@@ -3066,17 +3074,20 @@ void SimCore::step(float dt) {
 		if (o2_on && S.diet != DIET_PHOTO && (S.resp == 1 || (S.resp == 3 && fac_harm > 0.0f))) {
 			so = std::max(0.0f, o2[ec] - o2_tox) * o2_harm * S.size_factor * (S.resp == 3 ? fac_harm : 1.0f);
 		}
+		// Chapter 6 boss: in the net it is being digested.
+		float sn = net_on ? net_drain * net_at(x[i], y[i]) * S.size_factor : 0.0f;
 		stress_t[i] = st;
 		stress_a[i] = sa + so;
 		float own = std::max(0.0f, base + move + upkeep);
-		float cost = std::min(energy[i], (own + st + sa + so) * dt);
+		float cost = std::min(energy[i], (own + st + sa + so + sn) * dt);
 		{
 			Species &W = species[sp[i]];
-			float k = cost / std::max(1e-6f, (own + st + sa + so) * dt);
+			float k = cost / std::max(1e-6f, (own + st + sa + so + sn) * dt);
 			W.burn_total += cost;
 			W.burn_temp += st * dt * k;
 			W.burn_acid += sa * dt * k;
 			W.burn_o2 += so * dt * k;
+			net_fed += sn * dt * k;
 		}
 		energy[i] -= cost;
 		energy_out += cost;
@@ -3189,6 +3200,10 @@ void SimCore::step(float dt) {
 			int cause = CAUSE_STARVE;
 			if (st + sa + so > 0.5f * own) {
 				cause = so >= st && so >= sa ? CAUSE_O2 : (st >= sa ? CAUSE_TEMP : CAUSE_ACID);
+			}
+			if (sn > 0.0f && sn >= st + sa + so && sn > 0.3f * own) {
+				cause = CAUSE_EATEN; // (taken in by the net)
+				net_caught++;
 			}
 			kill(i, cause);
 			continue;
@@ -5838,6 +5853,121 @@ float SimCore::get_o2_share(float above) const {
 	return n ? (float)hit / (float)n : 0.0f;
 }
 
+
+// --- chapter 6 boss: the pseudopod net ------------------------------------------
+
+void SimCore::set_net(Dictionary p) {
+	net_on = (bool)p.get("on", true);
+	Vector2 c = p.get("center", Vector2(net_x, net_y));
+	net_x = c.x;
+	net_y = c.y;
+	net_core = p.get("core", net_core);
+	net_need = p.get("need", net_need);
+	net_grow = p.get("grow", net_grow);
+	net_shrink = p.get("shrink", net_shrink);
+	net_drain = p.get("drain", net_drain);
+	net_slow = p.get("slow", net_slow);
+	net_use = p.get("use", net_use);
+	float r0 = p.get("radius", 300.0f);
+	for (int j = 0; j < gh; j++) {
+		for (int i = 0; i < gw; i++) {
+			float dx = (i + 0.5f) * cell - net_x, dy = (j + 0.5f) * cell - net_y;
+			float d = std::sqrt(dx * dx + dy * dy);
+			net[j * gw + i] = inside_dish((i + 0.5f) * cell, (j + 0.5f) * cell, 0.0f) ? clampf((r0 - d) / 60.0f, 0.0f, 1.0f) : 0.0f;
+		}
+	}
+}
+
+// How firmly the net holds here, 0..1 (thin strands do not).
+float SimCore::net_at(float wx, float wy) const {
+	return clampf((net[nutrient_index(wx, wy)] - 0.25f) / 0.75f, 0.0f, 1.0f);
+}
+
+void SimCore::step_net(float dt) {
+	if (!net_on || gw == 0 || ++net_phase % 3) {
+		return;
+	}
+	const float d = dt * 3.0f;
+	for (int j = 0; j < gh; j++) {
+		for (int i = 0; i < gw; i++) {
+			const int c = j * gw + i;
+			const float wx = (i + 0.5f) * cell, wy = (j + 0.5f) * cell;
+			if (!inside_dish(wx, wy, 6.0f)) {
+				net_tmp[c] = 0.0f;
+				continue;
+			}
+			const float dx = wx - net_x, dy = wy - net_y;
+			if (dx * dx + dy * dy < net_core * net_core) {
+				net_tmp[c] = 1.0f; // (its body: always there)
+				continue;
+			}
+			float n = net[c];
+			float nb = 0.0f;
+			if (i > 0) {
+				nb = std::max(nb, net[c - 1]);
+			}
+			if (i + 1 < gw) {
+				nb = std::max(nb, net[c + 1]);
+			}
+			if (j > 0) {
+				nb = std::max(nb, net[c - gw]);
+			}
+			if (j + 1 < gh) {
+				nb = std::max(nb, net[c + gw]);
+			}
+			// Oxygen to spare: it reaches out from where it already is; too
+			// little: the pseudopods there are drawn back in.
+			const float o = o2_on ? o2[c] : 1.0f;
+			const float ok = clampf((o - net_need) / (net_need * 0.5f), -1.0f, 1.0f);
+			if (ok > 0.0f) {
+				n += net_grow * d * ok * std::max(nb, n);
+			} else {
+				n += net_shrink * d * ok;
+			}
+			net_tmp[c] = clampf(n, 0.0f, 1.0f);
+		}
+	}
+	net.swap(net_tmp);
+	// It breathes where it lies.
+	if (o2_on) {
+		for (int c = 0; c < gw * gh; c++) {
+			if (net[c] > 0.0f) {
+				o2[c] = std::max(0.0f, o2[c] - net_use * net[c] * d);
+			}
+		}
+	}
+}
+
+PackedFloat32Array SimCore::get_net_field() const {
+	PackedFloat32Array out;
+	out.resize(gw * gh);
+	float *w = out.ptrw();
+	for (int c = 0; c < gw * gh; c++) {
+		w[c] = net_on ? net[c] : 0.0f;
+	}
+	return out;
+}
+
+Dictionary SimCore::get_net_stats() const {
+	Dictionary d;
+	int hit = 0, n = 0;
+	if (net_on) {
+		for (int j = 0; j < gh; j++) {
+			for (int i = 0; i < gw; i++) {
+				if (inside_dish((i + 0.5f) * cell, (j + 0.5f) * cell, 0.0f)) {
+					hit += net[j * gw + i] > 0.5f ? 1 : 0;
+					n++;
+				}
+			}
+		}
+	}
+	d["coverage"] = n ? (float)hit / (float)n : 0.0f;
+	d["caught"] = net_caught;
+	d["fed"] = net_fed;
+	d["center"] = Vector2(net_x, net_y);
+	return d;
+}
+
 Dictionary SimCore::get_stats() const {
 	Dictionary d;
 	Array per;
@@ -6018,6 +6148,9 @@ void SimCore::_bind_methods() {
 	ClassDB::bind_method(D_METHOD("add_light", "pos", "radius", "power"), &SimCore::add_light);
 	ClassDB::bind_method(D_METHOD("add_light_band", "y_full", "y_dark", "power"), &SimCore::add_light_band);
 	ClassDB::bind_method(D_METHOD("set_oxygen", "params"), &SimCore::set_oxygen);
+	ClassDB::bind_method(D_METHOD("set_net", "params"), &SimCore::set_net);
+	ClassDB::bind_method(D_METHOD("get_net_field"), &SimCore::get_net_field);
+	ClassDB::bind_method(D_METHOD("get_net_stats"), &SimCore::get_net_stats);
 	ClassDB::bind_method(D_METHOD("add_iron", "pos", "radius", "seconds"), &SimCore::add_iron);
 	ClassDB::bind_method(D_METHOD("get_o2_field"), &SimCore::get_o2_field);
 	ClassDB::bind_method(D_METHOD("get_o2_at", "pos"), &SimCore::get_o2_at);

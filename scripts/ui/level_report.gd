@@ -489,6 +489,11 @@ func _facts() -> Array:
 		for k in 3:
 			var n_end: int = [eval.alive, eval.alive2, eval.alive3][k]
 			out.append("%s　最高数量：%d 只　结束时：%d / %d 只" % [level.species[k].label, [eval.peak, eval.peak2, eval.peak3][k], n_end, int(level.goal[["n", "n2", "n3"][k]])])
+	if level.has("net"):
+		out.append("伪足网覆盖：结束时 %.1f%%，最多时 %.1f%%（要压到 %d%% 以下并保持 %d 秒）" % [eval.net_cov * 100.0, eval.net_cov_peak * 100.0, roundi(float(level.goal.frac) * 100.0), int(level.goal.hold)])
+		out.append("被伪足网粘住消化：%d 只" % eval.net_caught)
+		if eval.net_done >= 0.0:
+			out.append("逼退用时：%d:%02d" % [int(eval.net_done) / 60, int(eval.net_done) % 60])
 	if level.world.has("oxygen"):
 		out.append("结束时水里的平均氧气：%.1f%%（最高 %.1f%%）" % [eval.o2_mean * 100.0, eval.o2_peak * 100.0])
 	if level.challenge.kind == "zones_held" and not eval.held.is_empty():

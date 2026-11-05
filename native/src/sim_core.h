@@ -310,6 +310,19 @@ private:
 	float iron_rate = 1.5f; // per second at the centre
 	float cell_graze = 3.0f; // energy/s a grazer takes off a producer cell (6 µm grazer)
 	void step_oxygen(float dt);
+	// Chapter 6 boss (6-5): a giant foraminiferan's pseudopod net on the
+	// seabed, coverage 0..1 per field cell. It spreads only where the water
+	// holds oxygen enough (it breathes), draws back where it does not; a
+	// cell in it is slowed and drained (food for the foraminiferan).
+	std::vector<float> net, net_tmp;
+	bool net_on = false;
+	int net_phase = 0;
+	float net_x = 1100.0f, net_y = 1300.0f, net_core = 70.0f;
+	float net_need = 0.06f, net_grow = 0.12f, net_shrink = 0.05f, net_drain = 3.0f, net_slow = 0.7f, net_use = 0.004f;
+	double net_fed = 0.0;
+	int net_caught = 0;
+	void step_net(float dt);
+	float net_at(float wx, float wy) const;
 	bool o2_dir(int i, bool up, float &dx, float &dy) const;
 	float resp_gain(int i) const;
 	double vent_total = 0.0;
@@ -646,6 +659,11 @@ public:
 	// The dish's mean oxygen (0..1), and the share of its water above `above`.
 	float get_o2_mean() const;
 	float get_o2_share(float above) const;
+	// Chapter 6 boss: {on, center, core, radius, need, grow, shrink, drain, slow, use}.
+	void set_net(Dictionary params);
+	PackedFloat32Array get_net_field() const;
+	// {coverage (share of the dish's water under the net), caught, fed}.
+	Dictionary get_net_stats() const;
 	// Environment: base values {temp, acid, radiation} and zones {center,
 	// radius, temp, acid, radiation, light, vent}.
 	void set_base_environment(Dictionary params);

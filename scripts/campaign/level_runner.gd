@@ -48,6 +48,11 @@ func start(l: Dictionary, last_design := {}, entry_at := Vector2.INF) -> void:
 	release_speed = host.speed
 	host.set_speed(1.0) # (the dish runs a moment before the designer opens: see _release)
 	host.load_world(l.world, randi() % 100000)
+	# Chapter 6 boss: the net is there from the start, to be seen before designing.
+	if l.has("net"):
+		host.sim.set_net(l.net)
+		host.net_world = true
+		host.o2_layer.reset()
 	host.release_count = int(l.release.count)
 	host.hud_root.set_level(l)
 	if not host.hud_root.revealed and not entry:
@@ -304,6 +309,11 @@ func tick(_delta: float) -> void:
 		if int(gs.get("worn", 0)) >= 1 and not fired.has("worn_first"):
 			fired["worn_first"] = true
 			host.hud_root.notify("被吐出的群体裂了一块甲：长好之前再被吞，就会被吃掉", Color(0.62, 0.52, 0.36))
+	if level.has("net"):
+		_net_beats()
+	if level.world.has("oxygen") and eval.sp2 >= 0 and level.challenge.kind == "o2_deaths_max" and eval.o2_dead >= 5 and not fired.has("o2_first"):
+		fired["o2_first"] = true
+		host.hud_root.notify("%s开始被氧气毒死：让它们往热泉深处躲，或者按 %s 撒铁粉" % [level.species[1].label, Keys.name_of(Keys.code("phage"))], Color(0.75, 0.32, 0.3))
 	if level.has("slug"):
 		_slug_beats()
 	if level.has("colony"):
@@ -311,6 +321,27 @@ func tick(_delta: float) -> void:
 	if t >= float(level.time_limit):
 		eval.observe(host.sim, t)
 		finish()
+
+
+# Chapter 6 boss: the net's moments, said as they happen.
+func _net_beats() -> void:
+	var cov := eval.net_cov
+	var goal := float(level.goal.frac)
+	if cov <= goal and not fired.has("net_low"):
+		fired["net_low"] = true
+		host.hud_root.notify("伪足网压到 %d%% 以下了：再坚持 %d 秒" % [roundi(goal * 100.0), int(level.goal.hold)], Ui.GOOD)
+	if cov > goal and fired.has("net_low") and not eval.goal_met:
+		fired.erase("net_low")
+		host.hud_root.notify("伪足网又铺开了：计时重来", Color(0.86, 0.5, 0.2))
+	if eval.net_caught >= 10 and not fired.has("net_caught"):
+		fired["net_caught"] = true
+		host.hud_root.notify("伪足网粘住了你的细胞：被拖慢以后会被慢慢消化", Color(0.75, 0.32, 0.3))
+	if cov >= eval.net_cov_peak - 0.001 and cov > 0.4 and not fired.has("net_big"):
+		fired["net_big"] = true
+		host.hud_root.notify("网越铺越大：氧气太多了。在网边缘撒铁粉", Color(0.86, 0.5, 0.2))
+	if eval.goal_met and not fired.has("net_done"):
+		fired["net_done"] = true
+		host.hud_root.notify("熔岩滤食兽把伪足收回了壳里", Ui.GOOD)
 
 
 func _update_objective(t: float) -> void:
@@ -403,6 +434,13 @@ func _update_objective(t: float) -> void:
 	elif g.kind == "coexist3":
 		ratio = clampf(minf(minf(float(eval.alive) / float(g.n), float(eval.alive2) / float(g.n2)), float(eval.alive3) / float(g.n3)), 0.0, 1.0)
 		now = "%s %d/%d　%s %d/%d　%s %d/%d" % [level.species[0].label, eval.alive, int(g.n), level.species[1].label, eval.alive2, int(g.n2), level.species[2].label, eval.alive3, int(g.n3)]
+	elif g.kind == "net_push":
+		var cov := eval.net_cov
+		ratio = clampf(float(g.frac) / maxf(cov, 0.001), 0.0, 1.0)
+		now = "伪足网覆盖：%.1f%% / %d%%" % [cov * 100.0, roundi(float(g.frac) * 100.0)]
+		if eval.net_low_since >= 0.0 and not eval.goal_met:
+			now += "　已保持 %d / %d 秒" % [int(eval.t - eval.net_low_since), int(g.hold)]
+		now += "　氧气 %.1f%%　你 %d　被网吃掉 %d" % [eval.o2_mean * 100.0, eval.alive, eval.net_caught]
 	elif g.kind == "o2_end":
 		ratio = clampf(eval.o2_mean / float(g.frac), 0.0, 1.0)
 		now = "平均氧气：%.1f%% / %d%%" % [eval.o2_mean * 100.0, roundi(float(g.frac) * 100.0)]

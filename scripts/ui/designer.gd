@@ -1196,7 +1196,7 @@ func _set_organs(ids: Array) -> void:
 	var p := Organs.apply({diet = 0}, organs)
 	deck_editor.diet = int(p.diet)
 	deck_editor._sync_views()
-	name_label.text = "捕食者" if int(p.diet) == 1 else "采集者"
+	name_label.text = ["采集者", "捕食者", "化能生命", "生产者"][clampi(int(p.diet), 0, 3)]
 	_update_pieces()
 	_refresh()
 

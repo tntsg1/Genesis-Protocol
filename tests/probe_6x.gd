@@ -32,6 +32,10 @@ func _initialize() -> void:
 		var e := OS.get_environment("P_O2_" + k.to_upper())
 		if e != "":
 			l.world.oxygen[k] = float(e)
+	for k in ["need", "grow", "shrink", "drain", "slow", "use", "radius"]:
+		var e := OS.get_environment("P_NET_" + k.to_upper())
+		if e != "" and l.has("net"):
+			l.net[k] = float(e)
 	if OS.get_environment("P_BAND") != "":
 		l.world.light_band = [330.0, float(OS.get_environment("P_BAND")), 0.6]
 	var R := Rules
@@ -50,6 +54,17 @@ func _initialize() -> void:
 				var a := _slot(l, 0)
 				a.extra = [_slot(l, 1, [], b[1]).params]
 				plans.append(["硫泉：%s" % b[0], a])
+		"6-5":
+			var aero := Rules.default_deck(0)
+			var seek := [R.card(R.C_O2_ABOVE, 0.08, R.C_NONE, 0.0, R.A_SEEK_O2)] + aero
+			for g in [[[2.0, 2.0, 1, 1, 3.0, 3.0, 3, 3], aero, "默认"], [[2.0, 2.0, 1, 1, 4.0, 3.0, 3, 3], aero, "繁殖4"], [[2.0, 2.0, 1, 1, 4.0, 3.0, 3, 3], seek, "繁殖4+找氧"]]:
+				plans.append([g[2], _design(l, g[0], g[1], [], 2)])
+			var iron := []
+			for at_t in range(20, 340, int(_env("P_IRON_EVERY", 12))):
+				iron.append({at = float(at_t), kind = "iron"})
+			var dz := _design(l, [2.0, 2.0, 1, 1, 4.0, 3.0, 3, 3], aero, [], 2)
+			dz.plan = iron
+			plans.append(["繁殖4+一直撒铁粉", dz])
 		"6-4":
 			for r in [[2, 2], [1, 2], [3, 3]]:
 				var a := _slot(l, 0)
@@ -68,6 +83,8 @@ func _initialize() -> void:
 				var st: Dictionary = sim.get_stats().species[ev.sp2]
 				var v := Vector2(1100, 1930)
 				diag = " 计%d 氧死%d 饿%d 老%d 泉心%.0f%% 泉边%.0f%% 中层%.0f%% 上层%.0f%%" % [ev.o2_dead, int(st.o2), int(st.starved), int(st.aged), sim.get_o2_at(v) * 100, sim.get_o2_at(v + Vector2(0, -200)) * 100, sim.get_o2_at(Vector2(1100, 1200)) * 100, sim.get_o2_at(Vector2(1100, 500)) * 100]
+			if l.has("net"):
+				diag = " 网%.0f%%(峰%.0f%%) 达成%ds 吃%d" % [ev.net_cov * 100, ev.net_cov_peak * 100, int(ev.net_done), ev.net_caught]
 			res[k] = [ev.stars(), ev.alive, ev.alive2, ev.alive3, ev.o2_mean, ev.held.duplicate(), ev.extinct, ev.t, diag], seeds)
 		WorkerThreadPool.wait_for_group_task_completion(task)
 		var g := 0

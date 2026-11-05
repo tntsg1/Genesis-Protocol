@@ -11,6 +11,10 @@ var mat: ShaderMaterial
 var map_amt := 0.0
 var _t := 0.0
 var _clock := 0.0
+# Chapter 6 boss: the foraminiferan's net (shaders/net_field.gdshader), a child.
+var net_rect: ColorRect
+var net_mat: ShaderMaterial
+var net_tex: ImageTexture
 
 
 func _ready() -> void:
@@ -19,6 +23,14 @@ func _ready() -> void:
 	mat.shader = preload("res://shaders/o2_field.gdshader")
 	material = mat
 	visible = false
+	net_rect = ColorRect.new()
+	net_rect.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	net_mat = ShaderMaterial.new()
+	net_mat.shader = preload("res://shaders/net_field.gdshader")
+	net_rect.material = net_mat
+	net_rect.use_parent_material = false
+	add_child(net_rect)
+	net_rect.visible = false
 
 
 # A new world: show only where there is oxygen.
@@ -38,6 +50,16 @@ func reset() -> void:
 	mat.set_shader_parameter("field_size", Vector2(g) * cell)
 	mat.set_shader_parameter("dish_center", c)
 	mat.set_shader_parameter("dish_radius", r)
+	net_rect.visible = host.net_world
+	net_rect.position = Vector2.ZERO
+	net_rect.size = size
+	net_mat.set_shader_parameter("rect_pos", position)
+	net_mat.set_shader_parameter("rect_size", size)
+	net_mat.set_shader_parameter("field_size", Vector2(g) * cell)
+	if host.net_world:
+		var ns: Dictionary = host.sim.get_net_stats()
+		net_mat.set_shader_parameter("center", ns.center)
+		net_mat.set_shader_parameter("core", float(host.level_runner.level.net.get("core", 70.0)) if host.level_runner else 70.0)
 	_refresh()
 
 
@@ -49,6 +71,13 @@ func _refresh() -> void:
 		mat.set_shader_parameter("o2_tex", tex)
 	else:
 		tex.update(img)
+	if net_rect.visible:
+		var ni := Image.create_from_data(g.x, g.y, false, Image.FORMAT_RF, host.sim.get_net_field().to_byte_array())
+		if net_tex == null or net_tex.get_size() != Vector2(g):
+			net_tex = ImageTexture.create_from_image(ni)
+			net_mat.set_shader_parameter("net_tex", net_tex)
+		else:
+			net_tex.update(ni)
 
 
 func tick(delta: float) -> void:
@@ -64,3 +93,5 @@ func tick(delta: float) -> void:
 	mat.set_shader_parameter("map_amount", map_amt)
 	mat.set_shader_parameter("ambient", 1.0 - 0.6 * map_amt)
 	mat.set_shader_parameter("t", _t)
+	if net_rect.visible:
+		net_mat.set_shader_parameter("t", _t)

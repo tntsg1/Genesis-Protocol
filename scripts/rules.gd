@@ -233,12 +233,12 @@ static func warnings(deck: Array, diet: int) -> Array:
 			msg = "已经在“%s”状态里了，这张永远做不到" % STATES[st][0]
 		elif goes >= 0 and not used_states.has(goes):
 			msg = "“%s”状态里还没有卡：进去以后只会漫游，也出不来" % STATES[goes][0]
-		elif diet == 0 and (cd.act == A_HUNT or cd.act == A_SCAVENGE):
-			msg = "采集者没有捕食器官，这个动作永远做不到"
+		elif diet != 1 and (cd.act == A_HUNT or cd.act == A_SCAVENGE):
+			msg = "%s没有捕食器官，这个动作永远做不到" % ["采集者", "", "化能生命", "生产者"][clampi(diet, 0, 3)]
 		elif diet == 1 and cd.act == A_SEEK_ALGAE:
 			msg = "捕食者不吃藻团，这个动作永远做不到"
-		elif diet == 0 and ([cd.c1, cd.c2].any(func(c: int) -> bool: return c in [C_SEE_PREY, C_SEE_SHELL, C_PREY_NEAR, C_PREY_SMALL])):
-			msg = "采集者不会寻找猎物或空壳，这个条件永远不成立"
+		elif diet != 1 and ([cd.c1, cd.c2].any(func(c: int) -> bool: return c in [C_SEE_PREY, C_SEE_SHELL, C_PREY_NEAR, C_PREY_SMALL])):
+			msg = "%s不会寻找猎物或空壳，这个条件永远不成立" % ["采集者", "", "化能生命", "生产者"][clampi(diet, 0, 3)]
 		elif cd.c1 != C_NONE and cd.c1 == cd.c2 and not has_threshold(cd.c1):
 			msg = "两个条件重复了"
 		elif _shadowed_by(deck, k) >= 0:

@@ -26,6 +26,7 @@ var world_cfg: Dictionary = {}
 var env_tex: ImageTexture
 var env_layer := 0
 var o2_world := false # chapter 6: this world has oxygen (O2Layer, environment layer 4)
+var net_world := false # chapter 6 boss: the pseudopod net (O2Layer draws it too)
 var o2_layer: O2Layer
 var env_amount := 0.0
 var zone_labels: Node2D
@@ -253,6 +254,7 @@ func load_world(cfg: Dictionary, world_seed := -1) -> void:
 	species_herd.clear()
 	build_world(cfg)
 	o2_world = cfg.has("oxygen")
+	net_world = false
 	if not o2_world and env_layer == 4:
 		set_env_layer(0)
 	if o2_layer:
