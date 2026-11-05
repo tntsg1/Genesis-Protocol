@@ -1044,6 +1044,10 @@ func _draw_overlay() -> void:
 				r = 30.0
 				col = Color(0.86, 0.62, 0.2)
 				text = "刺激头冠"
+			"iron":
+				r = 30.0
+				col = Color(0.72, 0.36, 0.2)
+				text = "撒铁粉"
 		var spin := Time.get_ticks_msec() / 1000.0 * 0.8
 		for k in 24:
 			var a0 := spin + TAU * k / 24.0
@@ -1162,7 +1166,7 @@ func focus(pos: Vector2, zoom: float) -> void:
 func dock_action(key: String) -> void:
 	match key:
 		"observe": set_observe(not observing)
-		"nutrient", "membrane", "heat", "current", "phage", "irritant": iv.select(key)
+		"nutrient", "membrane", "heat", "current", "phage", "irritant", "iron": iv.select(key)
 		"track": toggle_track()
 		"report": open_report()
 		"designer": open_designer()
@@ -1815,7 +1819,7 @@ func _unhandled_input(event: InputEvent) -> void:
 				elif left_down and not left_dragged:
 					var at := _event_world(mb.position)
 					pointer.click(mb.position)
-					if mode == "nutrient" or mode == "heat" or mode == "phage" or mode == "irritant":
+					if mode in ["nutrient", "heat", "phage", "irritant", "iron"]:
 						iv.place(mode, at)
 					elif mode == "release":
 						_do_release(at)

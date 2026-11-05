@@ -350,6 +350,7 @@ func _process(delta: float) -> void:
 	# Room below the cards for the "new rule" slot a dragged piece can fill.
 	custom_minimum_size.y = content_height() + (CARD_H + GAP if not readonly else 0.0)
 	var moving := lift >= 0
+	_edge_scroll(delta)
 	var y := 0.0
 	var k_ease := 1.0 - exp(-delta * 16.0)
 	# The order on show: while a card is carried, the others close up round
@@ -385,6 +386,30 @@ func _process(delta: float) -> void:
 		set_process(false)
 
 
+# While a card is carried near the top or bottom of the scrolling list, the
+# list scrolls (the top card may be out of sight), and the card keeps under
+# the pointer.
+func _edge_scroll(delta: float) -> void:
+	if lift < 0 or not _lift_ptr.is_finite():
+		return
+	var sc := get_parent() as ScrollContainer
+	if sc == null:
+		return
+	var r := sc.get_global_rect()
+	var edge := 56.0
+	var v := 0.0
+	if _lift_ptr.y < r.position.y + edge:
+		v = -clampf((r.position.y + edge - _lift_ptr.y) / edge, 0.0, 1.5)
+	elif _lift_ptr.y > r.end.y - edge:
+		v = clampf((_lift_ptr.y - (r.end.y - edge)) / edge, 0.0, 1.5)
+	if v == 0.0:
+		return
+	var before := sc.scroll_vertical
+	sc.scroll_vertical = int(before + v * 700.0 * delta)
+	if sc.scroll_vertical != before:
+		_drag_to((get_global_transform().affine_inverse() * _lift_ptr).y)
+
+
 # --- reordering: the card itself is picked up -------------------------------------
 # 2026-10-30 ("整个卡片能够拖动，而不是往上拖了覆盖然后直接交换"): pressing ⋮⋮
 # lifts the whole card; it follows the pointer up and down, the others slide
@@ -394,6 +419,7 @@ var lift := -1 # the deck index being carried
 var lift_y := 0.0 # its top, following the pointer
 var lift_pos := 0 # the gap among the other shown cards it would drop into
 var _lift_grab := 0.0
+var _lift_ptr := Vector2.INF # the pointer while carrying, global (to scroll the list at its edges)
 
 
 func begin_lift(k: int, local_y: float) -> void:
@@ -402,7 +428,7 @@ func begin_lift(k: int, local_y: float) -> void:
 	lift = k
 	lift_y = views[k].position.y
 	_lift_grab = local_y - lift_y
-	lift_pos = _gap_for(lift_y + card_height(k) * 0.5)
+	lift_pos = _gap_for(local_y)
 	selected = k
 	Audio.sfx("ui_click", -8.0, 0.9)
 	set_process(true)
@@ -410,7 +436,9 @@ func begin_lift(k: int, local_y: float) -> void:
 		v.queue_redraw()
 
 
-# The gap a card centred at `cy` would take among the others on show.
+# The gap the pointer at `cy` points into among the others on show (by the
+# pointer, not the carried card's middle: a tall card, one with a warning
+# line, could never reach the top that way; above the list is the top).
 func _gap_for(cy: float) -> int:
 	var y := 0.0
 	var p := 0
@@ -428,15 +456,23 @@ func _input(event: InputEvent) -> void:
 	if lift < 0:
 		return
 	if event is InputEventMouseMotion:
-		lift_y = clampf(get_local_mouse_position().y - _lift_grab, 0.0, maxf(0.0, content_height() - card_height(lift) - GAP))
-		var p := _gap_for(lift_y + card_height(lift) * 0.5)
-		if p != lift_pos:
-			lift_pos = p
-			Audio.sfx("holo_tick", -16.0, 1.2)
-		set_process(true)
+		_lift_ptr = (event as InputEventMouseMotion).global_position
+		_drag_to(make_input_local(event).position.y)
 	elif event is InputEventMouseButton and (event as InputEventMouseButton).button_index == MOUSE_BUTTON_LEFT and not event.pressed:
 		end_lift()
 		get_viewport().set_input_as_handled()
+
+
+# The carried card follows the pointer (local y) and the gap updates.
+func _drag_to(my: float) -> void:
+	if lift < 0:
+		return
+	lift_y = clampf(my - _lift_grab, 0.0, maxf(0.0, content_height() - card_height(lift) - GAP))
+	var p := _gap_for(my)
+	if p != lift_pos:
+		lift_pos = p
+		Audio.sfx("holo_tick", -16.0, 1.2)
+	set_process(true)
 
 
 # Set the carried card down in its gap (a move only when the gap is another).
@@ -454,6 +490,7 @@ func end_lift() -> void:
 			var last: int = others.back()
 			to = last - (1 if from < last else 0) + 1
 	lift = -1
+	_lift_ptr = Vector2.INF
 	move_card(from, to)
 	selected = to
 	set_process(true)

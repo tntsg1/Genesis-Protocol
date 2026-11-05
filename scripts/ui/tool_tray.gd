@@ -146,6 +146,7 @@ class Card extends Control:
 				"heat": return ["左键放%s斑 · 再按 %s 换成%s" % ["冷" if iv.cold else "热", key, "升温" if iv.cold else "降温"], Ui.ACCENT]
 				"current": return ["按住从起点拖向终点 · Esc 取消", Ui.ACCENT]
 				"irritant": return ["左键点它的头部 · Esc 取消", Ui.ACCENT]
+				"iron": return ["左键点培养皿撒铁粉 · Esc 取消", Ui.ACCENT]
 		if not iv.open_here(kind):
 			var lr: Node = iv.host.level_runner
 			if lr != null and int(lr.level.index) >= int(spec.opens):
