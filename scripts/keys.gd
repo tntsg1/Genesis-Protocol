@@ -24,6 +24,7 @@ const ACTIONS := [
 	["filter", "视图滤镜", KEY_C],
 	["report", "生态报告", KEY_R],
 	["lens", "放大镜（按住 Alt 临时）", KEY_Z],
+	["night", "黑夜模式", KEY_N],
 ]
 
 # Keys that stay put (camera, menus): cannot be bound to an action.

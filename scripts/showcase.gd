@@ -198,8 +198,14 @@ const ARCHETYPES := [
 ]
 
 
+var night: NightMode # night mode over everything (scripts/night_mode.gd)
+
+
 func _ready() -> void:
 	gallery = "--gallery" in OS.get_cmdline_user_args()
+	night = NightMode.new()
+	night.host = self
+	add_child(night)
 	sim = SimCore.new()
 	for arg in OS.get_cmdline_user_args():
 		if arg.begins_with("--seed="):
@@ -253,6 +259,8 @@ func load_world(cfg: Dictionary, world_seed := -1) -> void:
 	species_engulf.clear()
 	species_herd.clear()
 	build_world(cfg)
+	# Night mode on its own in the seabed levels (setting "auto").
+	NightMode.auto_on = bool(cfg.get("night", false))
 	o2_world = cfg.has("oxygen")
 	net_world = false
 	if not o2_world and env_layer == 4:

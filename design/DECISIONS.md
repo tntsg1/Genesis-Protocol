@@ -876,3 +876,4 @@
 
 ## 黑夜模式（2026-11-05，/grilling 第一轮）
 - 用户答 “a a b a”（5 题回了 4 个，按顺序理解）：实现方式用全屏后处理（色相不变、明暗反转，不改现有着色器和界面，避免和美工会话冲突；Jev hybrid 0.52 / post 0.45，置信 0.28，用户选 a）；纯黑（Jev 0.94）；第六章海底关默认自动开、其他默认关、随时手动切换以手动为准（Jev 0.65）；覆盖全部界面（Jev 0.97）。快捷键没回答，按推荐用 N（可改键）。
+- 实现：scripts/night_mode.gd（CanvasLayer 100，先 BackBufferCopy 再全屏 shaders/night.gdshader）；设置 display/night = auto/on/off（主菜单设置三档），按键 night=N（新动作不加 LAYOUT，旧改键保留）；关卡 world.night=true 时自动（第六章五关）；ending/arrival 播放时 NightMode.suspend。坑：这里屏幕拷贝和 COLOR 都是 sRGB 值（实测白天/黑夜同屏逐档对比才查出），要先转线性再进 OKLab；中低亮度两段曲线：近白压到纯黑、其余提亮。

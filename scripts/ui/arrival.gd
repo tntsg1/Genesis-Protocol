@@ -83,6 +83,15 @@ func _ready() -> void:
 	refresh()
 
 
+# (Dark already: night mode holds off while it plays.)
+func _enter_tree() -> void:
+	NightMode.suspend += 1
+
+
+func _exit_tree() -> void:
+	NightMode.suspend -= 1
+
+
 func _process(dt: float) -> void:
 	if done:
 		return

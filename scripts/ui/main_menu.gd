@@ -392,6 +392,23 @@ func _build_settings() -> void:
 		b.active = val == _cfg.vsync
 		vs_row.add_child(b)
 	v.add_child(Ui.label("关闭垂直同步可在高刷新率显示器上突破 60 FPS。", 11, Ui.INK_FAINT, Ui.sans()))
+	# Night mode (scripts/night_mode.gd).
+	v.add_child(Ui.label("黑夜模式", 14, Ui.INK, Ui.sans(600)))
+	var nm_row := HBoxContainer.new()
+	nm_row.add_theme_constant_override("separation", 8)
+	v.add_child(nm_row)
+	var nm_pills := []
+	for spec in [["自动", "auto"], ["始终开", "on"], ["始终关", "off"]]:
+		var b := Widgets.Pill.new(spec[0], 84, Ui.sans(600))
+		var val: String = spec[1]
+		nm_pills.append([b, val])
+		b.pressed.connect(func() -> void:
+			NightMode.set_setting(val)
+			for pr in nm_pills:
+				pr[0].active = pr[1] == NightMode.setting)
+		b.active = val == NightMode.setting
+		nm_row.add_child(b)
+	v.add_child(Ui.label("自动：第六章海底关卡自动变黑，其他地方保持明亮。按 %s 随时切换。" % Keys.name_of(Keys.code("night")), 11, Ui.INK_FAINT, Ui.sans()))
 	# Music and sound effect volume.
 	for which in ["music", "sfx"]:
 		v.add_child(Ui.label("音乐" if which == "music" else "音效", 14, Ui.INK, Ui.sans(600)))
