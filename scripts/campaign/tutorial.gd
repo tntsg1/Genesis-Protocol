@@ -128,6 +128,57 @@ const STEPS := {
 			{text = "设置完成了。\n\n点击「投放到培养皿」，开始实验。\n\n记得观察巨噬者的位置，尽量别让细胞聚在它附近。", ring = "go", wait = "release", goal = "点击「投放到培养皿」。"}],
 		run = ["右上角可以查看巨噬者的数量和剩余能量。\n\n能量耗尽，它就会饿死。如果它开始分裂，说明它吃得太多了。尽量让细胞离它远一点。"],
 	},
+	# Chapter 6 (first drafts; the user rewrites the copy).
+	"6-1": {
+		design = ["播种舱已经落在海底。这里没有光，也没有氧气，只有海床上的热泉冒着硫化物。
+
+这次要设计一种能靠热泉活下来的生命。",
+			{text = "在左下角的器官槽里装上「硫化酶」。装上后，细胞不再吃藻团，而是分解热泉冒出的硫化物获得能量。", ring = "organ:sulfase", wait = "organ:sulfase", goal = "安装「硫化酶」。", why = "装好了。现在「游向藻团」这张卡会让细胞游向热泉。"},
+			{text = "热泉边的能量足够，游得快只是白白耗能。把能量花在繁殖上：把「繁殖」提高到 4 级。", ring = "fert", wait = "fert4", goal = "繁殖达到 4 级。", why = "繁殖快了，热泉口能更快住满。"},
+			{text = "设置好了。点击「投放到培养皿」，播种舱会把它们放在中间的热泉口。", ring = "go", wait = "release", goal = "点击「投放到培养皿」。"}],
+		run = ["右上角能看到三个热泉口各有多少只你的生命。
+
+左右两个热泉口离得比较远。按 {current} 用洋流把一部分细胞送过去，附加挑战要三个热泉口都住满。"],
+	},
+	"6-2": {
+		design = ["海床上方的浅水里有阳光照进来。这次要设计一种会晒光的生命。
+
+它们越多，水里的氧气就越多。",
+			{text = "在器官槽里装上「光合膜」。装上后，细胞不再进食，只靠光获得能量，同时往水里放出氧气。", ring = "organ:photo", wait = "organ:photo", goal = "安装「光合膜」。", why = "装好了。现在「游向藻团」这张卡会让细胞游向更亮的地方。"},
+			{text = "光足够的时候，多分裂才能多放氧。把「繁殖」提高到 4 级。", ring = "fert", wait = "fert4", goal = "繁殖达到 4 级。"},
+			{text = "设置好了。点击「投放到培养皿」。", ring = "go", wait = "release", goal = "点击「投放到培养皿」。"}],
+		run = ["画面里淡淡的青色和小气泡就是氧气。
+
+按 {analysis} 进入分析视图，再按 {env_layer} 切到「氧气」图层，可以看清哪里有氧、哪里没有。"],
+	},
+	"6-3": {
+		design = ["氧气越来越浓，对硫泉游丝来说却是毒。
+
+这关要同时设计两种生命：A 晨光丝负责把氧气推高，B 硫泉游丝要躲进没有氧气的地方。",
+			{text = "点击顶部的「B · 硫泉游丝」，切换过去。", ring = "slot:1", wait = "slot:1"},
+			{text = "打开「行为规则」，进入「高级编辑」。", ring = "mode_adv", wait = "mode:advanced", goal = "打开「高级编辑」。"},
+			{text = "点「+ 新卡」加一张规则卡：条件拖入左边的「氧气高于」，动作拖入左边的「避开氧气」。
+
+这样硫泉游丝一碰到有氧的水，就会往氧气最少的地方游。", ring = "add", wait = "avoid_o2_card", src = "避开氧气", goal = "新卡：氧气高于 X → 避开氧气。", why = "设置好了。热泉附近的硫化物会吸掉氧气，那里就是它们的避难所。"},
+			{text = "规则从上往下检查。按住这张卡左边的 ⋮⋮，把它拖到最上面，让躲避比吃东西更优先。", ring = "avoid_handle", wait = "avoid_first", goal = "把「避开氧气」这张卡拖到第一张。"},
+			{text = "两个物种都设置好了。点击「投放到培养皿」。", ring = "go", wait = "release", goal = "点击「投放到培养皿」。"}],
+		run = [{text = "有硫泉游丝被困在有氧的水里时，按 {phage} 在它们身边撒铁粉：40 秒内那里的氧气会被吸掉。", ring = "dock:iron", wait = "used:iron"}],
+	},
+	"6-4": {
+		design = ["这关要建一条三级食物链：A 生产者晒光，B 采集者吃生产者，C 捕食者吃采集者。
+
+任何一个物种灭绝，实验都会结束。",
+			{text = "点击顶部的「B · 采集者」。", ring = "slot:1", wait = "slot:1"},
+			{text = "底部新开放了「呼吸」按钮：厌氧、好氧、兼性三选一。
+
+水里已经有氧气了，厌氧生命会中毒。把采集者设成「好氧」：有氧时同样的食物能得到约 3 倍能量。", ring = "resp", wait = "resp_aero", goal = "采集者的呼吸方式设为「好氧」。"},
+			{text = "采集者繁殖太快，会把生产者吃光，然后自己饿死。三个物种的数量要互相牵制。
+
+设置好后，点击「投放到培养皿」。", ring = "go", wait = "release", goal = "点击「投放到培养皿」。"}],
+		run = ["右上角能看到三个物种各有多少只。
+
+如果生产者被吃得太快，可以按 {membrane} 放隔离膜，给它们留一块安全的地方。"],
+	},
 	"3-1": {
 		design = ["暗水里视野很短，暗噬靠近时，往往只有离它最近的细胞能看见。试着让发现危险的细胞发出信号，提醒周围的同伴。",
 			{text = "暗噬游得比初始细胞快。先提高速度；预算不够的话，把繁殖降一级。", ring = "speed_fert", wait = "speed4", goal = "速度 → 4，繁殖 → 2（一共 12 点，正好守住低预算线）", why = "速度提高后，细胞更有机会逃脱暗噬。"},
@@ -680,6 +731,15 @@ func _met(w: String) -> bool:
 	if w == "calm":
 		return d != null and d.deck_editor.deck.any(func(c: Dictionary) -> bool:
 			return int(c.get("st", 0)) == Rules.S_ALERT and c.act == Rules.A_TO_FORAGE and c.c1 == Rules.C_STATE_TIME and float(c.t1) <= 14.0)
+	# Chapter 6.
+	if w == "fert4":
+		return d != null and float(d.genes[4]) >= 4.0
+	if w == "avoid_o2_card":
+		return d != null and d.deck_editor.deck.any(func(c: Dictionary) -> bool: return c.act == Rules.A_AVOID_O2 and Rules.C_O2_ABOVE in [c.c1, c.c2])
+	if w == "avoid_first":
+		return d != null and _forage_card(0) >= 0 and d.deck_editor.deck[_forage_card(0)].act == Rules.A_AVOID_O2
+	if w == "resp_aero":
+		return d != null and d.cur_slot == 1 and d.resp == Resp.AEROBIC
 	if w.begins_with("steps:"):
 		return host.steps_taken - wait_base >= int(w.substr(6))
 	if w.begins_with("slot:"):
@@ -1023,6 +1083,19 @@ func _ring_rect(key: String) -> Rect2:
 			c = d.body_bench.tiles.get(int(key.substr(5))) if d and d.body_bench else null
 		"mutate":
 			c = d.mutate_pill if d else null
+		"resp":
+			c = d.resp_pill if d else null
+		"fert":
+			if d == null:
+				return Rect2()
+			c = d.tab_buttons["genome"] if d.page != "genome" else d.gene_rows[4]
+		"avoid_handle":
+			if d == null:
+				return Rect2()
+			if d.page != "rules":
+				c = d.tab_buttons["rules"]
+			else:
+				return _card_part(_card_of(Rules.A_AVOID_O2), "handle").grow(4.0)
 		"temp":
 			c = d.temp_slider if d else null
 		"divide":
