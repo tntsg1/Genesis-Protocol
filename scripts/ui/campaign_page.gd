@@ -489,8 +489,10 @@ func _fill_card(l: Dictionary) -> void:
 	who.add_child(badge)
 	var wv := VBoxContainer.new()
 	wv.add_theme_constant_override("separation", 0)
-	wv.add_child(Ui.label(Levels.DIRECTOR.name, 14, Ui.INK, Ui.sans(600)))
-	wv.add_child(Ui.label(Levels.DIRECTOR.title, 11, Ui.INK_FAINT, Ui.sans(500)))
+	# (Chapter 6 on: the seed ship's AI commissions the work, far from Europa.)
+	var sender: Dictionary = l.get("director", Levels.DIRECTOR)
+	wv.add_child(Ui.label(sender.name, 14, Ui.INK, Ui.sans(600)))
+	wv.add_child(Ui.label(sender.title, 11, Ui.INK_FAINT, Ui.sans(500)))
 	who.add_child(wv)
 	card_box.add_child(who)
 	var brief := Ui.label(l.brief, 15, Ui.INK, Ui.sans())
@@ -524,7 +526,7 @@ func _fill_card(l: Dictionary) -> void:
 		_row(grid, "开放基因", "、".join(names), null)
 	var iv := []
 	for k: String in l.interventions:
-		iv.append("局部升温" if l.id in ["2-1", "2-2", "2-3", "2-4", "2-5", "5-1"] and k == "heat" else {nutrient = "营养投放", membrane = "隔离膜", heat = "局部升降温", current = "洋流引导", phage = "投放病毒", irritant = "刺激头冠"}.get(k, k))
+		iv.append("局部升温" if l.id in ["2-1", "2-2", "2-3", "2-4", "2-5", "5-1"] and k == "heat" else {nutrient = "营养投放", membrane = "隔离膜", heat = "局部升降温", current = "洋流引导", phage = "投放病毒", irritant = "刺激头冠", iron = "撒铁粉"}.get(k, k))
 	_row(grid, "可用干预", "、".join(iv), null)
 	_row(grid, "已知情况", "\n".join(l.threats), null)
 	_rule()

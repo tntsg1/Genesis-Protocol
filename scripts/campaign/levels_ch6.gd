@@ -21,6 +21,7 @@ const SEABED := {
 const SPRINGS := [Vector2(400, 1480), Vector2(1100, 1930), Vector2(1800, 1480)]
 const LIGHT_BAND := [330.0, 1000.0, 0.6] # full light above y 330, none below 1000
 const OXYGEN := {on = true, start = 0.0, emit = 0.02, harm = 16.0, decay = 0.0015, sulfide = 0.05}
+const SHIP_AI := {name = "创生协议", title = "播种飞船 · 主控 AI"}
 const SULFUR_COLOR := Color(0.93, 0.62, 0.3)
 const DAWN_COLOR := Color(0.42, 0.8, 0.5)
 
@@ -44,6 +45,7 @@ const SULFUR_FEW := {label = "硫泉游丝", role = "sulfur", params = SULFUR,
 const LEVELS := [
 	{
 		id = "6-1", index = 25, name = "着陆", en = "LANDFALL", depth = 1.2,
+		director = SHIP_AI,
 		teach = "化能合成：硫化酶与热泉",
 		role = "sulfur",
 		brief = "播种舱已经落在这颗星球的海底。这里没有阳光，水里也没有氧气，唯一的能量来自海床上的热泉。\n\n热泉冒出的硫化物可以被分解来获得能量。给你的生命装上「硫化酶」，让它们靠热泉活下来。\n\n离热泉越远，能拿到的能量越少。挤在同一个热泉口的细胞太多，也会互相抢。",
@@ -77,6 +79,7 @@ const LEVELS := [
 	},
 	{
 		id = "6-2", index = 26, name = "第一缕氧", en = "FIRST BREATH", depth = 2.0,
+		director = SHIP_AI,
 		teach = "光合作用：光合膜与氧气",
 		role = "dawn",
 		brief = "海床上方的浅水里有阳光照进来。这次你要设计一种会晒光的生命：给它装上「光合膜」，它就能靠光制造养分。\n\n光合作用会放出氧气。它们长得越多，水里的氧气就越多。\n\n上一关种下的硫泉游丝还在热泉边生活。",
@@ -111,6 +114,7 @@ const LEVELS := [
 	},
 	{
 		id = "6-3", index = 27, name = "氧气灾难", en = "THE GREAT OXIDATION", depth = 2.8,
+		director = SHIP_AI,
 		teach = "氧气的毒性：避开氧气与避难所",
 		brief = "晨光丝长得越来越多，水里的氧气也越来越浓。\n\n对硫泉游丝来说，氧气是毒。氧气浓度超过 8% 的水会让它们不断掉能量，越浓掉得越快。\n\n这一关你同时设计两种生命：晨光丝负责把氧气推高，硫泉游丝要想办法躲进没有氧气的地方。热泉附近的硫化物会吸掉氧气，那里是它们的避难所。\n\n要么救下它们，要么接受这场灭绝。",
 		ai_log = "研究日志 0027：氧气浓度在上升，硫泉游丝开始成片死亡。\n\n地球上也发生过同样的事。大约 24 亿年前，蓝细菌放出的氧气毒死了大批厌氧生命。科学家把它叫作「大氧化事件」。",
@@ -154,6 +158,7 @@ const LEVELS := [
 	},
 	{
 		id = "6-4", index = 28, name = "呼吸", en = "BREATH", depth = 3.6,
+		director = SHIP_AI,
 		teach = "有氧呼吸：三级食物链",
 		brief = "氧气已经遍布浅水。会用氧气的生命，吃同样一口食物，能得到多得多的能量。\n\n这一关你要同时设计三种生命：会晒光的生产者、吃生产者的采集者，以及吃采集者的捕食者。\n\n基因组页新开放了「呼吸方式」开关：厌氧、好氧、兼性三选一。",
 		ai_log = "研究日志 0028：氧气不再只是毒药。\n\n地球上的生命后来学会了用氧气分解食物，得到的能量多了十几倍。有了这些能量，更复杂的食物链才建立起来。",
@@ -164,20 +169,20 @@ const LEVELS := [
 			light_band = LIGHT_BAND,
 			algae_cap = 0,
 			algae_seed = [0, 22.0],
-			oxygen = {on = true, start = 0.08, emit = 0.02, harm = 16.0, decay = 0.0015, sulfide = 0.05},
+			oxygen = {on = true, start = 0.08, emit = 0.02, harm = 16.0, decay = 0.0015, sulfide = 0.05, graze = 2.0},
 			species = [SULFUR_FEW],
 		},
-		release = {at = Vector2(1100, 400), count = 60},
-		release_b = {at = Vector2(900, 560), count = 20},
-		release_c = {at = Vector2(1300, 560), count = 6},
+		release = {at = Vector2(1100, 400), count = 80},
+		release_b = {at = Vector2(900, 560), count = 40},
+		release_c = {at = Vector2(1300, 620), count = 4},
 		species = [
 			{label = "生产者", name = "晨光丝", role = "dawn", organs = ["photo"], genes = [2.0, 2.0, 1.0, 1.0, 3.0, 3.0, 3.0, 3.0]},
-			{label = "采集者", name = "采集者 B", role = "grazer", resp = 2, genes = [2.5, 2.5, 1.0, 1.0, 2.5, 3.0, 3.0, 3.0]},
-			{label = "捕食者", name = "捕食者 C", role = "hunter", organs = ["cnido"], resp = 2, genes = [3.0, 2.5, 1.0, 3.0, 2.0, 3.0, 3.0, 3.0],
+			{label = "采集者", name = "采集者 B", role = "grazer", resp = 2, genes = [2.0, 2.5, 1.0, 1.0, 3.0, 3.0, 3.0, 3.0]},
+			{label = "捕食者", name = "捕食者 C", role = "hunter", organs = ["cnido"], resp = 2, genes = [2.0, 2.5, 1.0, 2.0, 1.5, 3.0, 3.0, 3.0],
 				deck = [
 					{c1 = Rules.C_ENERGY_ABOVE, t1 = 1.0, c2 = Rules.C_NONE, t2 = 0.0, act = Rules.A_DIVIDE},
 					{c1 = Rules.C_ENERGY_BELOW, t1 = 1.0, c2 = Rules.C_SEE_PREY, t2 = 0.0, act = Rules.A_HUNT},
-					{c1 = Rules.C_NONE, t1 = 0.0, c2 = Rules.C_NONE, t2 = 0.0, act = Rules.A_REST},
+					{c1 = Rules.C_ENERGY_ABOVE, t1 = 0.6, c2 = Rules.C_NONE, t2 = 0.0, act = Rules.A_REST},
 				]},
 		],
 		resp = 2,
@@ -199,6 +204,7 @@ const LEVELS := [
 	},
 	{
 		id = "6-5", index = 29, name = "熔岩滤食兽", en = "THE LAVA SIEVE", depth = 4.4,
+		director = SHIP_AI,
 		teach = "Boss：有孔虫伪足网",
 		open = false,
 		brief = "海床上出现了一张会慢慢扩大的黏网。",

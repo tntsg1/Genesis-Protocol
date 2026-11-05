@@ -484,6 +484,17 @@ func _facts() -> Array:
 			var won: bool = pc[0] > pc[1] and pc[0] >= 3
 			parts.append("%s 片 %d : %d（%s）" % ["ABC"[k], pc[0], pc[1], "你占优" if won else "对手占优"])
 		out.append("最后 30 秒各藻场的平均数量（你 : 冰晶游丝）：%s。至少要在 %d 片占优；这次你占优 %d 片。" % ["，".join(parts), int(level.goal.n), eval.patches_won])
+	# Chapter 6: the oxygen, the springs held, the food chain, the anaerobes poisoned.
+	if level.goal.kind == "coexist3":
+		for k in 3:
+			var n_end: int = [eval.alive, eval.alive2, eval.alive3][k]
+			out.append("%s　最高数量：%d 只　结束时：%d / %d 只" % [level.species[k].label, [eval.peak, eval.peak2, eval.peak3][k], n_end, int(level.goal[["n", "n2", "n3"][k]])])
+	if level.world.has("oxygen"):
+		out.append("结束时水里的平均氧气：%.1f%%（最高 %.1f%%）" % [eval.o2_mean * 100.0, eval.o2_peak * 100.0])
+	if level.challenge.kind == "zones_held" and not eval.held.is_empty():
+		out.append("三个热泉口的数量：%s（每个至少 %d 只）" % [" / ".join(eval.held.map(func(v: int) -> String: return str(v))), int(level.challenge.n)])
+	if level.challenge.kind == "o2_deaths_max":
+		out.append("%s　被氧气毒死：%d 只（上限 %d 只）　结束时还有 %d 只" % [level.species[1].label, eval.o2_dead, int(level.challenge.n), eval.alive2])
 	if level.goal.kind == "alive_safe":
 		out.append("被%s吃掉：%d 只（上限 %d 只）" % [str(level.get("eaten_by", "猎手")), eval.eaten, int(level.goal.eaten)])
 	if level.goal.kind == "alive_phage":
@@ -567,11 +578,11 @@ func _facts() -> Array:
 		out.append("第一只抵达光照区：%s。" % ("%.0f 秒" % eval.first_in if eval.first_in >= 0.0 else "没有抵达"))
 		out.append("光照区里最多同时有 %d 只。" % eval.zone_peak)
 	if not s.is_empty():
-		var dead: int = int(s.starved) + int(s.eaten) + int(s.aged) + int(s.temp) + int(s.acid) + int(s.phage)
+		var dead: int = int(s.starved) + int(s.eaten) + int(s.aged) + int(s.temp) + int(s.acid) + int(s.phage) + int(s.get("o2", 0))
 		if dead > 0:
 			# Every cause there was, biggest first: what to fix next.
 			var causes := []
-			for c: Array in [["饥饿", s.starved], ["被捕食", s.eaten], ["自然衰老", s.aged], ["水温", s.temp], ["酸蚀", s.acid], ["被撑破", s.phage]]:
+			for c: Array in [["饥饿", s.starved], ["被捕食", s.eaten], ["自然衰老", s.aged], ["水温", s.temp], ["酸蚀", s.acid], ["被撑破", s.phage], ["氧气中毒", s.get("o2", 0)]]:
 				if int(c[1]) > 0:
 					causes.append([c[0], int(c[1])])
 			causes.sort_custom(func(a: Array, b: Array) -> bool: return a[1] > b[1])

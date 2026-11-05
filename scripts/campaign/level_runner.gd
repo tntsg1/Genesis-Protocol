@@ -400,12 +400,25 @@ func _update_objective(t: float) -> void:
 			now += "　被撑破：你 %d　%s %d" % [eval.lysed, level.world.species[int(g.rival)].label, eval.rival_lysed]
 		if eval.alive > eval.rival_alive and eval.alive >= int(g.get("n", 0)):
 			now += "　· 当前已达标，请保持到实验结束。"
+	elif g.kind == "coexist3":
+		ratio = clampf(minf(minf(float(eval.alive) / float(g.n), float(eval.alive2) / float(g.n2)), float(eval.alive3) / float(g.n3)), 0.0, 1.0)
+		now = "%s %d/%d　%s %d/%d　%s %d/%d" % [level.species[0].label, eval.alive, int(g.n), level.species[1].label, eval.alive2, int(g.n2), level.species[2].label, eval.alive3, int(g.n3)]
+	elif g.kind == "o2_end":
+		ratio = clampf(eval.o2_mean / float(g.frac), 0.0, 1.0)
+		now = "平均氧气：%.1f%% / %d%%" % [eval.o2_mean * 100.0, roundi(float(g.frac) * 100.0)]
+		if eval.sp2 >= 0:
+			now += "　%s %d · 被氧毒死 %d" % [level.species[1].label, eval.alive2, eval.o2_dead]
 	elif g.kind == "patches":
 		ratio = clampf(float(eval.patches_won) / float(g.n), 0.0, 1.0)
 		now = "占优 %d / %d 片（近 30 秒平均，比分见地图）" % [eval.patches_won, int(g.n)]
 	# Goals judged at the end: enough now is not a pass yet (review round 3:
 	# "62/60 at 0:22 read as done").
-	if g.kind in ["alive_end", "coexist", "alive_safe", "boss"] and ratio >= 1.0 and not eval.goal_met:
+	# Chapter 6: the oxygen, and how each spring is held, beside the count.
+	if level.world.has("oxygen") and g.kind in ["alive_end", "coexist3"]:
+		now += "　氧气 %.1f%%" % (eval.o2_mean * 100.0)
+	if level.challenge.kind == "zones_held" and not eval.held.is_empty():
+		now += "　热泉 %s" % " / ".join(eval.held.map(func(v: int) -> String: return str(v)))
+	if g.kind in ["alive_end", "coexist", "coexist3", "alive_safe", "boss", "o2_end"] and ratio >= 1.0 and not eval.goal_met:
 		# (A famine still to come or under way: enough now says nothing yet,
 		# review 2026-11-02 "第 5 秒就够了".)
 		var lean_end := -1.0

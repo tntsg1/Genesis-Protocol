@@ -28,7 +28,7 @@ func _slot(l: Dictionary, k: int, genes := [], deck := [], resp := -1) -> Dictio
 func _initialize() -> void:
 	var id := OS.get_environment("P_LEVEL") if OS.get_environment("P_LEVEL") != "" else "6-1"
 	var l: Dictionary = Levels.by_id(id).duplicate(true)
-	for k in ["sulfide", "diffuse", "emit", "harm", "tox", "decay", "start"]:
+	for k in ["sulfide", "diffuse", "emit", "harm", "tox", "decay", "start", "graze", "need", "use"]:
 		var e := OS.get_environment("P_O2_" + k.to_upper())
 		if e != "":
 			l.world.oxygen[k] = float(e)

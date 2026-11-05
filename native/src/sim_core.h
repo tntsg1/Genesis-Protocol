@@ -308,6 +308,7 @@ private:
 	};
 	std::vector<IronSpot> irons;
 	float iron_rate = 1.5f; // per second at the centre
+	float cell_graze = 3.0f; // energy/s a grazer takes off a producer cell (6 µm grazer)
 	void step_oxygen(float dt);
 	bool o2_dir(int i, bool up, float &dx, float &dy) const;
 	float resp_gain(int i) const;

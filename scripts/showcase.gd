@@ -25,6 +25,8 @@ var world_cfg: Dictionary = {}
 # which of them analysis mode lays out as a map (0 none, 1-3).
 var env_tex: ImageTexture
 var env_layer := 0
+var o2_world := false # chapter 6: this world has oxygen (O2Layer, environment layer 4)
+var o2_layer: O2Layer
 var env_amount := 0.0
 var zone_labels: Node2D
 var _zone_zoom := 0.0
@@ -250,6 +252,11 @@ func load_world(cfg: Dictionary, world_seed := -1) -> void:
 	species_engulf.clear()
 	species_herd.clear()
 	build_world(cfg)
+	o2_world = cfg.has("oxygen")
+	if not o2_world and env_layer == 4:
+		set_env_layer(0)
+	if o2_layer:
+		o2_layer.reset()
 	acc = 0.0
 	iv.reset(60.0)
 	nutrient_img = _field_image(sim.get_nutrient_field())
@@ -461,6 +468,10 @@ func _build_view() -> void:
 	var marks := LabMarks.new()
 	marks.host = self
 	add_child(marks)
+	# Chapter 6: the oxygen in the water, under the cells.
+	o2_layer = O2Layer.new()
+	o2_layer.host = self
+	add_child(o2_layer)
 
 	var quad := QuadMesh.new()
 	quad.size = Vector2(1, 1)
@@ -681,9 +692,11 @@ func _process(delta: float) -> void:
 	pop_amt = move_toward(pop_amt, 1.0 if vm == 2 else 0.0, delta / Ui.T_MID)
 	dish_mat.set_shader_parameter("species_amount", species_amt)
 	dish_mat.set_shader_parameter("pop_amount", pop_amt)
-	env_amount = move_toward(env_amount, 1.0 if analyzing and env_layer > 0 else 0.0, delta / Ui.T_MID)
+	env_amount = move_toward(env_amount, 1.0 if analyzing and env_layer > 0 and env_layer < 4 else 0.0, delta / Ui.T_MID)
+	if o2_layer:
+		o2_layer.tick(delta)
 	dish_mat.set_shader_parameter("env_amount", env_amount)
-	if env_amount > 0.0 or env_layer > 0:
+	if (env_amount > 0.0 or env_layer > 0) and env_layer < 4:
 		dish_mat.set_shader_parameter("env_layer", env_layer)
 	_tick_capsule(delta)
 	if level_runner:
@@ -1044,7 +1057,8 @@ func _env_image() -> Image:
 	return Image.create_from_data(size.x, size.y, false, Image.FORMAT_RGBAF, sim.get_env_field().to_byte_array())
 
 
-# Analysis mode's environment map: 0 none, 1 temperature, 2 acidity, 3 signals.
+# Analysis mode's environment map: 0 none, 1 temperature, 2 acidity, 3 signals,
+# 4 oxygen (chapter 6: O2Layer draws it).
 func set_env_layer(k: int) -> void:
 	env_layer = k
 	if k > 0 and not analyzing:
@@ -1848,7 +1862,7 @@ func _unhandled_input(event: InputEvent) -> void:
 			"designer": open_designer()
 			"observe": set_observe(not observing)
 			"analysis": set_analysis(not analyzing)
-			"env_layer": set_env_layer((env_layer + 1) % 4)
+			"env_layer": set_env_layer((env_layer + 1) % (5 if o2_world else 4))
 			"filter": set_view_mode((view_mode + 1) % 3)
 			"report": open_report()
 		match key:

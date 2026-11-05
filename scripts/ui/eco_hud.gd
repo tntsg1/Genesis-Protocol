@@ -192,8 +192,10 @@ func _build_brand() -> void:
 	_place(v, Vector2(0, 0), Vector2(28, 22), 300)
 	var t := Ui.label("GENESIS  PROTOCOL", 13, Ui.INK, Ui.mono("SemiBold"))
 	v.add_child(t)
-	v.add_child(Ui.label("创生协议　·　木卫二冰下海洋样本", 13, Ui.INK_SOFT, Ui.sans(500)))
-	v.add_child(Ui.label("EUROPA STATION  /  EUR-01  /  DISH Ø 2120 µm", 10, Ui.INK_FAINT, Ui.mono()))
+	brand_name = Ui.label("创生协议　·　木卫二冰下海洋样本", 13, Ui.INK_SOFT, Ui.sans(500))
+	v.add_child(brand_name)
+	brand_code = Ui.label("EUROPA STATION  /  EUR-01  /  DISH Ø 2120 µm", 10, Ui.INK_FAINT, Ui.mono())
+	v.add_child(brand_code)
 	panels["brand"] = v
 
 
@@ -345,7 +347,15 @@ func flash_objective() -> void:
 
 # A different world was loaded in place (a campaign level, back to the
 # sandbox): the species panel, history and records start over.
+var brand_name: Label
+var brand_code: Label
+
+
 func rebuild_world() -> void:
+	# Chapter 6: the first planet, not Europa.
+	if brand_name:
+		brand_name.text = "创生协议　·　星球一 · 热泉海床" if host.o2_world else "创生协议　·　木卫二冰下海洋样本"
+		brand_code.text = ("PLANET ONE  /  P1-00  /  DISH Ø 2120 µm" if host.o2_world else "EUROPA STATION  /  EUR-01  /  DISH Ø 2120 µm")
 	for c in species_box.get_children():
 		if c != species_box.get_child(0): # keep the caption
 			species_box.remove_child(c)
@@ -671,7 +681,7 @@ func set_env_layer(k: int) -> void:
 		set_analysis(true)
 	for j in env_buttons.size():
 		env_buttons[j].active = j == k
-	env_hint.text = ["", "冰蓝 = 冷　橙 = 热　每条线 5°C", "黄绿越深越酸　每条线 0.2", "品红 = 信号 A　青 = 信号 B"][k]
+	env_hint.text = ["", "冰蓝 = 冷　橙 = 热　每条线 5°C", "黄绿越深越酸　每条线 0.2", "品红 = 信号 A　青 = 信号 B", "紫灰 = 无氧　青 = 有氧　白线 = 8%（厌氧生命开始中毒）"][k]
 
 
 func set_analysis(on: bool) -> void:
@@ -696,7 +706,7 @@ func set_analysis(on: bool) -> void:
 		# The environment map under the diagram (T cycles it).
 		var layers := _hbox(v, 8)
 		layers.add_child(Ui.label("环境图层  T", 12, Ui.INK_SOFT, Ui.sans(600)))
-		for spec in [[0, "无"], [1, "温度"], [2, "酸度"], [3, "信号"]]:
+		for spec in [[0, "无"], [1, "温度"], [2, "酸度"], [3, "信号"], [4, "氧气"]]:
 			var b := Widgets.Pill.new(spec[1], 56, Ui.sans(500))
 			var key: int = spec[0]
 			b.pressed.connect(func() -> void: host.set_env_layer(key))
@@ -707,6 +717,9 @@ func set_analysis(on: bool) -> void:
 		layers.add_child(env_hint)
 		analysis_legend.visible = false
 	if on:
+		# (The oxygen map only where there is oxygen: chapter 6.)
+		if env_buttons.size() > 4:
+			env_buttons[4].visible = host.o2_world
 		analysis_legend.visible = true
 		analysis_legend.appear()
 	else:

@@ -2925,7 +2925,7 @@ void SimCore::step(float dt) {
 		}
 		// Chapter 6: grazing a producer cell (it is eaten down, then dies).
 		if (act == ACT_GRAZE && food < 0 && cfood >= 0 && alive[cfood]) {
-			float take = std::min(std::max(0.0f, energy[cfood]), 9.0f * (r / 6.0f) * dt);
+			float take = std::min(std::max(0.0f, energy[cfood]), cell_graze * (r / 6.0f) * dt);
 			energy[cfood] -= take;
 			hurt[cfood] = 2.0f;
 			energy[i] += take * EAT_ALGAE_EFF * rmul;
@@ -5702,6 +5702,7 @@ void SimCore::set_oxygen(Dictionary p) {
 	fac_low = p.get("fac_low", fac_low);
 	fac_harm = p.get("fac_harm", fac_harm);
 	iron_rate = p.get("iron", iron_rate);
+	cell_graze = p.get("graze", cell_graze);
 	float start = p.get("start", 0.0f);
 	for (int j = 0; j < gh; j++) {
 		for (int i = 0; i < gw; i++) {
