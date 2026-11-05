@@ -145,6 +145,23 @@ static func clear_guide_at(id: String) -> void:
 		save()
 
 
+# Chapter 6 (DECISIONS Q213): the look the player gave a species role
+# ("sulfur" 硫泉游丝, "dawn" 晨光丝 ...): later levels show their own
+# species of that role with this name and colour (the numbers stay the level's).
+static func set_look(role: String, look_name: String, color: Color) -> void:
+	ensure()
+	if not data.has("looks"):
+		data.looks = {}
+	data.looks[role] = {name = look_name, color = color.to_html()}
+	save()
+
+
+static func look(role: String) -> Dictionary:
+	ensure()
+	var l: Dictionary = data.get("looks", {}).get(role, {})
+	return {} if l.is_empty() else {name = str(l.name), color = Color.html(str(l.color))}
+
+
 # Tests start from a clean slate (their own file only).
 static func reset_for_tests() -> void:
 	if path() == TEST_PATH:

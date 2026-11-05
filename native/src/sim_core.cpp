@@ -32,7 +32,7 @@ constexpr float TEMP_SEVERE = 10.0f;    // beyond this many degrees it also hurt
 constexpr float TEMP_HURT = 0.12f;      // extra energy/s per degree past severe
 constexpr float CHEMO_RATE = 4.0f;      // energy/s at full vent chemistry (shared with neighbours)
 constexpr float CHEMO_SEED = 0.35f;     // vent-borne chemosynthetic cells per second
-constexpr float PHOTO_RATE = 3.0f;      // energy/s at light 1 for a producer (光合膜; shared with neighbours)
+constexpr float PHOTO_RATE = 5.0f;      // energy/s at light 1 for a producer (光合膜; shared with neighbours)
 constexpr float ACID_COST = 1.5f;       // energy/s at acidity 1 (armour softens it)
 constexpr float TOL_UPKEEP = 0.04f;     // per tolerance level around the default 2.5
 // Gene trade-offs (DECISIONS 第十四轮 Q32): no gene is "max it and done".
@@ -2158,7 +2158,8 @@ void SimCore::scan_one(int i) {
 					}
 				}
 				bool they_eat_me = T.diet == DIET_PREDATOR && r < T.radius * 0.9f;
-				bool i_eat_them = S.diet == DIET_PREDATOR && T.radius < r * 0.9f;
+				// (Chapter 6: a hunter goes after what moves; producers are grazed, not hunted.)
+				bool i_eat_them = S.diet == DIET_PREDATOR && T.radius < r * 0.9f && T.diet != DIET_PHOTO;
 				if (they_eat_me && d2 < threat_d2) {
 					threat_d2 = d2;
 					threat = j;
@@ -5715,10 +5716,10 @@ int SimCore::add_iron(Vector2 pos, float radius, float seconds) {
 }
 
 void SimCore::step_oxygen(float dt) {
-	if (!o2_on || gw == 0 || ++o2_phase % 2) {
+	if (!o2_on || gw == 0) {
 		return;
 	}
-	const float d2 = dt * 2.0f;
+	const float d2 = dt; // (every tick: oxygen spreads far, faster than a smell)
 	transport(o2, o2_diffuse, d2);
 	// Fading, and the vents' sulfide taking it up (so the water round a vent
 	// stays anoxic: a refuge).

@@ -3,8 +3,8 @@ extends RefCounted
 # Behaviour-card vocabulary (GDD 3.2). Ids match SimCore's Cond / Act enums;
 # a card is {c1, t1, c2, t2, act} with c = 0 meaning "no condition".
 
-enum { C_NONE, C_ENERGY_BELOW, C_ENERGY_ABOVE, C_SEE_ALGAE, C_PREDATOR_NEAR, C_SEE_PREY, C_CROWD, C_ATTACKED, C_AGE_ABOVE, C_SEE_SHELL, C_TEMP_BAD, C_SIGNAL_A, C_SIGNAL_B, C_PREY_NEAR, C_PREY_SMALL, C_STATE_TIME, C_PEER_STATE, C_IMMUNE }
-enum { A_SEEK_ALGAE, A_FLEE, A_HUNT, A_FOLLOW, A_REST, A_DIVIDE, A_WANDER, A_SCAVENGE, A_EMIT_A, A_EMIT_B, A_SEEK_COMFORT, A_TO_FORAGE, A_TO_ALERT, A_TO_BREED, A_TO_SLEEP, A_SEEK_SIG_A, A_SEEK_SIG_B, A_SECRETE, A_DISPERSE, A_INDUCE, A_AGGREGATE }
+enum { C_NONE, C_ENERGY_BELOW, C_ENERGY_ABOVE, C_SEE_ALGAE, C_PREDATOR_NEAR, C_SEE_PREY, C_CROWD, C_ATTACKED, C_AGE_ABOVE, C_SEE_SHELL, C_TEMP_BAD, C_SIGNAL_A, C_SIGNAL_B, C_PREY_NEAR, C_PREY_SMALL, C_STATE_TIME, C_PEER_STATE, C_IMMUNE, C_O2_ABOVE }
+enum { A_SEEK_ALGAE, A_FLEE, A_HUNT, A_FOLLOW, A_REST, A_DIVIDE, A_WANDER, A_SCAVENGE, A_EMIT_A, A_EMIT_B, A_SEEK_COMFORT, A_TO_FORAGE, A_TO_ALERT, A_TO_BREED, A_TO_SLEEP, A_SEEK_SIG_A, A_SEEK_SIG_B, A_SECRETE, A_DISPERSE, A_INDUCE, A_AGGREGATE, A_AVOID_O2, A_SEEK_O2 }
 # Gene-expression states (DECISIONS 第十一轮): each has its own cards.
 enum { S_FORAGE, S_ALERT, S_BREED, S_SLEEP }
 # [name, en, what it does to the body, opens]
@@ -35,6 +35,7 @@ const CONDS := [
 	["在本状态超过", "seconds", 1, 90, 20, 1, "进入当前状态后，已经过了 X 秒。每次切换状态都会重新计时。"],
 	["看见同伴在", "state", 0, 3, 2, 1, "视野里有处于 X 状态的同伴（要识别蛋白）。和“跟随同伴”放在一张卡上时，就游向那只同伴"],
 	["有免疫记忆", "", 0, 0, 0, 0, "这只细胞身上存着裂囊针的一段 DNA（要记忆片段）。可以加“不”，写给还没有记忆的细胞"],
+	["氧气高于", "o2", 0.02, 0.6, 0.08, 0.01, "所在位置的氧气浓度高于 X。"],
 ]
 # [name, help]
 const ACTS := [
@@ -59,12 +60,14 @@ const ACTS := [
 	["远离同伴", "朝同伴少的方向游开；身边 60 µm 内没有同伴时跳过"],
 	["唤醒潜伏针", "叫醒藏在这只细胞基因里的潜伏针：二十来秒后细胞被撑破，放出 30 个病毒，只会扎别的物种。没有潜伏针时跳过"],
 	["聚合", "和身边的同伴聚成一个整体：不再进食，也不会变老，朝光爬；爬到藻场边长成子实体，约两成细胞牺牲成柄，其余变成孢子。已经在目标藻场上时这张卡跳过。"],
+	["避开氧气", "游向附近氧气最少的水。已经在无氧的水里时跳过。"],
+	["游向氧气", "游向附近氧气最多的水。四周都没有更多氧气时跳过。"],
 ]
 const SLOTS := [3, 4, 5, 6, 8]
 # Where each library piece opens in the campaign (DECISIONS 第十轮 Q7/Q11):
 # a level id ("1-4") or a whole chapter ("2"). The sandbox has them all.
-const COND_OPENS := ["", "1-3", "1-3", "1-3", "1-3", "2-1", "1-5", "2-2", "1-5", "2", "1-4", "3-1", "3-4", "2-1", "2-1", "2-3", "3-2", "4-2"]
-const ACT_OPENS := ["1-3", "1-3", "2-1", "1-5", "1-3", "1-3", "1-3", "2", "3-1", "3-4", "1-4", "2-3", "2-4", "2-5", "2-3", "3-1", "3-4", "3-3", "4-1", "4-3", "5-1"]
+const COND_OPENS := ["", "1-3", "1-3", "1-3", "1-3", "2-1", "1-5", "2-2", "1-5", "2", "1-4", "3-1", "3-4", "2-1", "2-1", "2-3", "3-2", "4-2", "6-3"]
+const ACT_OPENS := ["1-3", "1-3", "2-1", "1-5", "1-3", "1-3", "1-3", "2", "3-1", "3-4", "1-4", "2-3", "2-4", "2-5", "2-3", "3-1", "3-4", "3-3", "4-1", "4-3", "5-1", "6-3", "6-4"]
 
 
 # “不” on a condition and “或” between two open from level 7 (DECISIONS Q21).
@@ -115,7 +118,7 @@ static func opens_text(kind: String, id: int) -> String:
 	var at := opens_at(kind, id)
 	if at.contains("-"):
 		return "第 %s 关解锁" % at
-	return "第%s章解锁" % ["", "一", "二", "三", "四"][clampi(int(at), 0, 4)]
+	return "第%s章解锁" % ["", "一", "二", "三", "四", "五", "六", "七", "八", "九", "十"][clampi(int(at), 0, 10)]
 
 
 static func card(c1: int, t1: float, c2: int, t2: float, act: int) -> Dictionary:
@@ -168,6 +171,7 @@ static func threshold_text(c: int, t: float) -> String:
 		"ratio": return "我的 %d%%" % roundi(t * 100.0)
 		"seconds": return "%d 秒" % roundi(t)
 		"state": return STATES[clampi(roundi(t), 0, 3)][0]
+		"o2": return "%d%%" % roundi(t * 100.0)
 	return ""
 
 

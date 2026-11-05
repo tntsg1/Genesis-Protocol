@@ -109,6 +109,8 @@ func open_designer(last_design := {}) -> void:
 	rules.id = level.id
 	rules.rules_readonly = level.get("rules_readonly", false)
 	rules.organ_slots = level.get("organ_slots", 0)
+	rules.resp = level.get("resp", 0)
+	rules.resp_open = level.get("resp_open", false)
 	rules.require_organs = level.get("require_organs", [])
 	rules.forbid_organs = level.get("forbid_organs", [])
 	if level.has("species"):
@@ -133,14 +135,26 @@ func on_design(params: Dictionary) -> void:
 	var used := 0.0
 	for g in genes:
 		used += float(g) - 1.0
+	if level.get("resp_open", false):
+		used += Resp.cost(int(params.get("resp", 0)))
 	design = {params = params, genes = genes, used = used,
 		design = {name = params.name, color = params.color, genes = genes, deck = params.deck, temp_opt = params.get("temp_opt", 12.0), mutates = params.get("mutates", true),
-			organs = params.get("organs", [])}}
+			organs = params.get("organs", []), resp = params.get("resp", 0)}}
 	if params.has("virus"):
 		design.virus = params.virus
 		design.design.virus = params.virus # (a retry starts from these points)
 	if params.has("blocks"):
 		design.design.blocks = params.blocks
+	# Chapter 6: the look of each species role carries to later levels (Q213).
+	if level.has("role"):
+		CampaignSave.set_look(level.role, params.name, params.color)
+	var specs: Array = level.get("species", [])
+	if specs.size() > 1:
+		if specs[0].has("role"):
+			CampaignSave.set_look(specs[0].role, params.name, params.color)
+		for k in (params.get("extra", []) as Array).size():
+			if k + 1 < specs.size() and specs[k + 1].has("role"):
+				CampaignSave.set_look(specs[k + 1].role, params.extra[k].name, params.extra[k].color)
 	# Level 8: the other species, released beside the first.
 	if params.has("extra"):
 		design.extra = params.extra
@@ -191,9 +205,12 @@ func on_released(i: int) -> void:
 		eval.blocks_used = (design.params.get("blocks", []) as Array).size()
 	# Level 8: the second species comes out beside the first, now.
 	for k in (design.get("extra", []) as Array).size():
-		var rb: Dictionary = level.get("release_b", level.release)
+		var rb: Dictionary = level.get(["release_b", "release_c"][mini(k, 1)], level.get("release_b", level.release))
 		var j: int = host.release_now(LevelEval.level_params(level, design.extra[k]), rb.at, int(rb.count))
-		eval.sp2 = j
+		if k == 0:
+			eval.sp2 = j
+		else:
+			eval.sp3 = j
 		eval.uses_state = LevelEval.deck_uses(design.extra[k].get("deck", []), int(level.challenge.get("state", -1)))
 	var dp: Dictionary = design.get("params", {})
 	eval.founder = {topt = float(dp.get("temp_opt", 12.0)), tol = float(dp.get("temp_tol", 2.5))}

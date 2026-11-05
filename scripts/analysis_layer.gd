@@ -12,7 +12,7 @@ const ACTION_COLORS := [
 	Color("e08a3c"), Color("7d8790"), Color(0, 0, 0, 0), Color("c9a227"), Color("3f7fd0"),
 	Color(0, 0, 0, 0), Color("b04fc4"), Color("2fa39a"), Color("5f8fb0"),
 ]
-const ACTION_NAMES := ["", "觅食", "进食", "追捕", "追捕", "逃离", "食腐", "", "分裂", "跟随", "", "避寒避热", "循味", "散开"]
+const ACTION_NAMES := ["", "觅食", "进食", "追捕", "追捕", "逃离", "食腐", "", "分裂", "跟随", "", "避寒避热", "循味", "散开", "", "氧气"]
 
 var host: Node2D
 var rings: MultiMeshInstance2D

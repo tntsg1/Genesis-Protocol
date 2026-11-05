@@ -299,8 +299,8 @@ private:
 	std::vector<float> o2;
 	bool o2_on = false;
 	int o2_phase = 0;
-	float o2_decay = 0.003f, o2_diffuse = 1.2f, o2_sulfide = 0.6f, o2_emit = 0.05f, o2_use = 0.02f;
-	float o2_tox = 0.08f, o2_harm = 1.2f, o2_need = 0.25f;
+	float o2_decay = 0.003f, o2_diffuse = 3.0f, o2_sulfide = 0.6f, o2_emit = 0.02f, o2_use = 0.01f;
+	float o2_tox = 0.08f, o2_harm = 1.2f, o2_need = 0.08f;
 	float aero_mult = 3.0f, aero_low = 0.45f, fac_mult = 2.2f, fac_low = 0.85f, fac_harm = 0.0f;
 	double o2_made = 0.0, o2_breathed = 0.0;
 	struct IronSpot {

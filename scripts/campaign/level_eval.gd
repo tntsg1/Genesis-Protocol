@@ -9,6 +9,13 @@ var level: Dictionary
 var sp := -1 # the player's species index
 var sp2 := -1 # level 8: the player's second species (the predator)
 var alive2 := 0
+var sp3 := -1 # chapter 6 (6-4): the third species
+var alive3 := 0
+var peak3 := 0
+var o2_mean := 0.0 # chapter 6: the dish's mean oxygen (0..1)
+var held: Array = [] # 6-1: the player's cells at each spring
+var o2_dead := 0 # 6-3: the second species' cells poisoned by oxygen
+var o2_peak := 0.0
 var uses_state := false # level 8: the predator's deck switches into the challenge's state
 var peak2 := 0
 var budget_used := 0.0
@@ -89,6 +96,18 @@ func observe(sim: SimCore, time: float) -> void:
 	if sp2 >= 0:
 		alive2 = sim.get_positions(sp2).size()
 		peak2 = maxi(peak2, alive2)
+	if sp3 >= 0:
+		alive3 = sim.get_positions(sp3).size()
+		peak3 = maxi(peak3, alive3)
+	if level.challenge.kind == "zones_held":
+		held.clear()
+		for c: Vector2 in level.challenge.zones:
+			held.append(count_in(sim, sp, {center = c, radius = level.challenge.radius}))
+	if level.world.has("oxygen"):
+		o2_mean = sim.get_o2_mean()
+		if sp2 >= 0:
+			o2_dead = int(sim.get_stats().species[sp2].o2)
+		o2_peak = maxf(o2_peak, o2_mean)
 	if level.has("blooms"):
 		_blooms(sim, t)
 	# Chapter 3 boss: a rival colony; crowding it out (any time) wins.
@@ -140,7 +159,8 @@ func observe(sim: SimCore, time: float) -> void:
 	zone_peak = maxi(zone_peak, zone_now)
 	curve.append([t, alive, alive2 if sp2 >= 0 else (_phage_line() if level.has("phage") else zone_now)])
 	# Two species: losing either one ends it (keeping both is the point).
-	if alive == 0 or (sp2 >= 0 and alive2 == 0):
+	# (Chapter 6, 6-3: the second species may die out; saving it is the challenge.)
+	if alive == 0 or (sp2 >= 0 and alive2 == 0 and not level.get("b_may_die", false)) or (sp3 >= 0 and alive3 == 0):
 		extinct = true
 	var ch: Dictionary = level.challenge
 	if ch.kind == "first_in" and first_in < 0.0 and zone_now > 0:
@@ -257,6 +277,14 @@ func finish() -> void:
 	if g.kind == "coexist" and not extinct and alive >= int(g.n) and alive2 >= int(g.n2):
 		goal_met = true
 		goal_time = t
+	# Chapter 6: the three of a food chain, each above its floor (6-4).
+	if g.kind == "coexist3" and not extinct and alive >= int(g.n) and alive2 >= int(g.n2) and alive3 >= int(g.n3):
+		goal_met = true
+		goal_time = t
+	# Chapter 6: the water's mean oxygen at the end (6-3).
+	if g.kind == "o2_end" and not extinct and o2_mean >= float(g.frac):
+		goal_met = true
+		goal_time = t
 	if level.challenge.kind == "cold_lineage" and _sim and not extinct:
 		cold_share = cold_lineage_share(_sim, sp, {founder_topt = founder.topt, founder_tol = founder.tol, degrees = level.challenge.degrees})
 
@@ -346,6 +374,14 @@ func challenge_met() -> bool:
 			return not extinct and cold_share >= float(ch.frac)
 		"alive_end":
 			return not extinct and alive >= int(ch.n)
+		"o2_end":
+			return not extinct and o2_mean >= float(ch.frac)
+		"alive_b":
+			return not extinct and alive2 >= int(ch.n)
+		"o2_deaths_max":
+			return not extinct and alive2 > 0 and o2_dead <= int(ch.n)
+		"zones_held":
+			return not extinct and held.size() > 0 and held.all(func(v: int) -> bool: return v >= int(ch.n))
 		"first_kill":
 			return first_kill >= 0.0 and first_kill <= float(ch.seconds)
 		"uses_state":
@@ -447,9 +483,12 @@ static func prepare(l: Dictionary, design: Dictionary, seed: int, threads := 8) 
 	for k in (design.get("extra", []) as Array).size():
 		var pb: Dictionary = level_params(l, design.extra[k])
 		sim.add_species(pb)
-		var rb: Dictionary = l.get("release_b", l.release)
+		var rb: Dictionary = l.get(["release_b", "release_c"][mini(k, 1)], l.get("release_b", l.release))
 		sim.spawn(n + 1 + k, rb.at, int(rb.count), 60.0)
-		ev.sp2 = n + 1 + k
+		if k == 0:
+			ev.sp2 = n + 1 + k
+		else:
+			ev.sp3 = n + 1 + k
 		ev.uses_state = deck_uses(design.extra[k].get("deck", []), int(l.challenge.get("state", -1)))
 	var pulses: Dictionary = l.get("pulses", {})
 	return {sim = sim, eval = ev, t = 0.0, next_obs = 0.0, next_pulse = float(pulses.get("every", -1.0)), level = l, fired = {},

@@ -86,6 +86,8 @@ var genes := [2.0, 2.0, 1.0, 1.0, 3.0, 3.0, 3.0, 3.0]
 var temp_opt := 12.0
 var temp_slider: Control
 var mutates := true # natural mutation (off = the line stays exactly as designed)
+var resp := Resp.ANAEROBIC # chapter 6: how it breathes (a switch from 6-4: Resp)
+var resp_pill: Widgets.Pill
 var organs: Array = [] # installed organ ids (scripts/organs.gd)
 var organ_bay: Control # the organ slots on the genome page (levels with organ_slots)
 var state_bar: Control # the state map over the deck (levels with states)
@@ -370,7 +372,7 @@ func _build_top() -> void:
 	# Level 8: which species is on the bench.
 	for k in (level_rules.get("species", []) as Array).size():
 		var sl: Dictionary = level_rules.species[k]
-		var b := Widgets.Pill.new("%s · %s" % ["AB"[k], sl.label], 120, Ui.sans(700))
+		var b := Widgets.Pill.new("%s · %s" % ["ABC"[mini(k, 2)], sl.label], 120, Ui.sans(700))
 		b.active = k == 0
 		b.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 		var idx := k
@@ -1585,6 +1587,7 @@ func _apply_design(d: Dictionary, record := false) -> void:
 	_set_genes(d.genes)
 	_set_temp_opt(float(d.get("temp_opt", 12.0)))
 	_set_mutates(bool(d.get("mutates", true)))
+	_set_resp(int(d.get("resp", level_rules.get("resp", Resp.ANAEROBIC))))
 	_set_organs(d.get("organs", []))
 	color = d.color
 	name_edit.text = d.name
@@ -1678,8 +1681,22 @@ func apply_reference() -> void:
 
 func _design() -> Dictionary:
 	return {name = name_edit.text.strip_edges() if name_edit.text.strip_edges() != "" else "未命名物种",
-		color = color, genes = genes.duplicate(), deck = deck_editor.deck.duplicate(true), temp_opt = temp_opt, mutates = mutates,
+		color = color, genes = genes.duplicate(), deck = deck_editor.deck.duplicate(true), temp_opt = temp_opt, mutates = mutates, resp = resp,
 		organs = organs.duplicate(), persona = persona, bold = bold, blocks = body_bench.cells.duplicate(true) if body_bench else []}
+
+
+# Chapter 6: the respiration switch, shown where a level opens it (6-4 on).
+func resp_open() -> bool:
+	return bool(level_rules.get("resp_open", false))
+
+
+func _set_resp(r: int) -> void:
+	resp = r
+	if resp_pill:
+		resp_pill.visible = resp_open()
+		resp_pill.text = "呼吸：%s" % Resp.name_of(r)
+		resp_pill.tooltip_text = Resp.LIST[clampi(r, 0, 3)][2]
+	_refresh()
 
 
 func _set_mutates(on: bool) -> void:
@@ -1791,6 +1808,14 @@ func _build_footer() -> void:
 	mutate_pill.pressed.connect(func() -> void: _set_mutates(not mutates))
 	h.add_child(mutate_pill)
 	_set_mutates(mutates)
+	resp_pill = Widgets.Pill.new("", 150, Ui.sans(600))
+	resp_pill.custom_minimum_size.y = 44
+	resp_pill.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	resp_pill.pressed.connect(func() -> void:
+		_set_resp(Resp.next(resp))
+		_toast("呼吸方式：%s。%s" % [Resp.name_of(resp), Resp.LIST[resp][2]]))
+	h.add_child(resp_pill)
+	_set_resp(resp)
 	var save_b := Widgets.Pill.new("保存到物种库", 140, Ui.sans(600))
 	save_b.custom_minimum_size.y = 44
 	save_b.size_flags_vertical = Control.SIZE_SHRINK_CENTER
@@ -1810,6 +1835,8 @@ func _refresh() -> void:
 	if budget_label == null:
 		return # still building (the deck editor reports its first deck early)
 	var used := 0.0
+	if resp_open():
+		used += Resp.cost(resp)
 	for k in genes.size():
 		used += genes[k] - 1.0
 		if k == 6:
@@ -2250,6 +2277,8 @@ func _params_from(d: Dictionary) -> Dictionary:
 		deck = d.deck,
 	}, d.get("organs", []))
 	params.merge(Rules.masks(level_id(), d.get("organs", [])), true)
+	# Chapter 6: how it breathes (the level's fixed way until the switch opens).
+	params.resp = int(d.get("resp", Resp.ANAEROBIC)) if resp_open() else int(level_rules.get("resp", 0))
 	if not (d.get("blocks", []) as Array).is_empty():
 		params.blocks = d.blocks
 	return params
@@ -2263,7 +2292,7 @@ func _init_slots() -> void:
 	for k in specs.size():
 		if k < saved.size():
 			sp_slots.append(saved[k])
-		elif k == 0:
+		elif k == 0 and not specs[0].has("organs") and not specs[0].has("role"):
 			var d0 := _design()
 			d0.name = specs[0].get("name", d0.name)
 			sp_slots.append(d0)
@@ -2271,11 +2300,18 @@ func _init_slots() -> void:
 			# The level's starting point for this slot (e.g. the predator).
 			var d := _design()
 			var spec: Dictionary = specs[k]
-			d.name = spec.get("name", "设计物种 %s" % "AB"[k])
+			d.name = spec.get("name", "设计物种 %s" % "ABC"[mini(k, 2)])
 			d.color = SWATCHES[(k * 2) % SWATCHES.size()]
 			d.organs = (spec.get("organs", []) as Array).duplicate()
 			d.genes = (spec.get("genes", d.genes) as Array).duplicate()
 			d.deck = (spec.get("deck", Rules.default_deck(1 if d.organs.has("cnido") else 0)) as Array).duplicate(true)
+			if spec.has("resp"):
+				d.resp = int(spec.resp)
+			# Chapter 6: a role the player named before keeps their name and colour.
+			var lk := CampaignSave.look(str(spec.get("role", "")))
+			if not lk.is_empty():
+				d.name = lk.name
+				d.color = lk.color
 			sp_slots.append(d)
 	cur_slot = 0
 	_apply_design(sp_slots[0])

@@ -9,6 +9,8 @@ extends Node
 #   current   drag: a current along the drag, for 30 s
 #   irritant  click by the guardian's head (level 24, in the current's slot
 #             and key): it draws its corona in for a few seconds
+#   iron      click (chapter 6, in the phage's slot and key): iron dust soaks
+#             up the oxygen there for 40 s, an anoxic patch
 # In a campaign level only the level's interventions are open; the others
 # show as locked. The showcase forwards input; this draws on its overlay.
 
@@ -19,8 +21,11 @@ const SPECS := {
 	current = {name = "洋流引导", cost = 30.0, cool = 6.0, opens = 5},
 	phage = {name = "投放病毒", cost = 30.0, cool = 10.0, opens = 18},
 	irritant = {name = "刺激头冠", cost = 30.0, cool = 8.0, opens = 24},
+	iron = {name = "撒铁粉", cost = 35.0, cool = 8.0, opens = 27},
 }
-const ORDER := ["nutrient", "membrane", "heat", "current", "phage", "irritant"]
+const ORDER := ["nutrient", "membrane", "heat", "current", "phage", "irritant", "iron"]
+const IRON_R := 220.0 # chapter 6: iron dust soaks up the oxygen here (banded iron formations)
+const IRON_TIME := 40.0
 const IRRITANT_REACH := 170.0 # how near its head a drop must land (µm)
 const PHAGE_R := 90.0
 const PHAGE_N := 80
@@ -98,6 +103,8 @@ func tick(sim_dt: float) -> void:
 
 # Level 24 puts the irritant in the current's slot (its card, its key).
 func slot_kind(kind: String) -> String:
+	if kind == "phage" and open_here("iron"):
+		return "iron"
 	return "irritant" if kind == "current" and open_here("irritant") else kind
 
 
@@ -128,6 +135,7 @@ func _hint(kind: String) -> void:
 		"current": t = "按住拖出洋流的方向和力度，持续 30 秒（%d 点）　·　右键 / Esc 取消" % int(SPECS.current.cost)
 		"phage": t = "点击投放一团病毒（%d 点）　·　右键 / Esc 取消" % int(SPECS.phage.cost)
 		"irritant": t = "点喷口守卫的头部，放一小团刺激物：头冠缩回约 6 秒（%d 点）　·　右键 / Esc 取消" % int(SPECS.irritant.cost)
+		"iron": t = "点击撒一片铁粉：40 秒内吸掉那里的氧气（%d 点）　·　右键 / Esc 取消" % int(SPECS.iron.cost)
 	host.hud_root.show_hint(t)
 
 
@@ -204,6 +212,10 @@ func place(kind: String, at: Vector2) -> void:
 				host.level_runner.eval.shot_times.append(host.level_runner.eval.t)
 			host.hud_root._event("投放了一团病毒", Ui.ACCENT, at)
 			Audio.sfx("nutrient", -4.0, 0.7)
+		"iron":
+			host.sim.add_iron(at, IRON_R, IRON_TIME)
+			host.hud_root._event("撒下铁粉：这片水的氧气会被吸掉", IRON_COL, at)
+			Audio.sfx("nutrient", -4.0, 0.8)
 		"heat":
 			host.sim.add_temp_spot(at, 190.0, -12.0 if cold else 12.0, HEAT_TIME)
 			Audio.sfx("cold" if cold else "warm")
@@ -257,6 +269,17 @@ func draw(o: Node2D, zoom: float) -> void:
 					var rr := r * (0.2 + 0.8 * ph) if warm else r * (1.0 - 0.8 * ph)
 					o.draw_arc(c, rr, 0.0, TAU, 64, Color(col, 0.7 * f * sin(ph * PI)), 2.0 * px, true)
 				_label(o, c + Vector2(0, -r - 12.0 * px), "%+d°C · %ds" % [int(iv.delta), left], col.darkened(0.2), f, zoom)
+			"iron":
+				var c: Vector2 = iv.center
+				var r: float = iv.radius
+				o.draw_circle(c, r, Color(IRON_COL, 0.06 * f))
+				_dashed(o, c, r, Color(IRON_COL, 0.7 * f), px)
+				for k in 90:
+					var a := k * 2.39996
+					var rr := r * 0.95 * sqrt(fposmod(k * 0.618 + 0.11, 1.0))
+					var sink := fposmod(t * 0.08 + k * 0.137, 1.0)
+					o.draw_circle(c + Vector2.from_angle(a) * rr + Vector2(0, 6.0 * sink), (1.4 + fposmod(k * 0.37, 1.0)) * px * 1.5, Color(IRON_COL, (0.35 + 0.4 * (1.0 - sink)) * f))
+				_label(o, c + Vector2(0, -r - 12.0 * px), "铁粉 · 吸氧 · %ds" % left, IRON_COL.darkened(0.2), f, zoom)
 			"current":
 				var c: Vector2 = iv.center
 				var r: float = iv.radius
@@ -294,12 +317,16 @@ func draw(o: Node2D, zoom: float) -> void:
 			_label(o, drag_to + Vector2(0, -16) * px, "%d µm/s" % int(d.length() / 260.0 * 70.0), Ui.ACCENT, 1.0, zoom)
 		return
 	_irritant(o, zoom, px, t)
-	if host.mode in ["nutrient", "heat", "membrane", "current", "phage", "irritant"] and host.pointer:
+	if host.mode in ["nutrient", "heat", "membrane", "current", "phage", "irritant", "iron"] and host.pointer:
 		var at: Vector2 = host.get_viewport().get_canvas_transform().affine_inverse() * host.pointer.pos
 		match host.mode:
 			"nutrient":
 				_dashed(o, at, 45.0, Color(Ui.ACCENT, 0.8), px)
 				o.draw_circle(at, 45.0, Color(Ui.ACCENT, 0.06))
+			"iron":
+				_dashed(o, at, IRON_R, Color(IRON_COL, 0.8), px)
+				o.draw_circle(at, IRON_R, Color(IRON_COL, 0.05))
+				_label(o, at + Vector2(0, -IRON_R - 12.0 * px), "撒铁粉 · 40 秒", IRON_COL.darkened(0.2), 1.0, zoom)
 			"phage":
 				_dashed(o, at, PHAGE_R, Color(0.5, 0.3, 0.82, 0.8), px)
 				o.draw_circle(at, PHAGE_R, Color(0.5, 0.3, 0.82, 0.05))
@@ -327,6 +354,7 @@ func draw(o: Node2D, zoom: float) -> void:
 
 
 const IRRITANT_COL := Color(0.86, 0.62, 0.2)
+const IRON_COL := Color(0.72, 0.36, 0.2)
 
 
 # The guardian's head (its corona), or INF without one.

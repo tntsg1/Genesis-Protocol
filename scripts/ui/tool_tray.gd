@@ -10,7 +10,7 @@ extends GlassPanel
 # Hover gives the full explanation. Clicking a card picks the tool.
 
 const IV := preload("res://scripts/interventions.gd")
-const KINDS := ["nutrient", "membrane", "heat", "current", "phage", "irritant"]
+const KINDS := ["nutrient", "membrane", "heat", "current", "phage", "irritant", "iron"]
 const DESC := {
 	nutrient = "点击培养皿中的位置，投放一团营养物质，吸引附近的细胞。",
 	membrane = "按住拖出一道膜，45 秒内谁也过不去",
@@ -18,6 +18,7 @@ const DESC := {
 	current = "按住拖出方向，水流把生物送过去",
 	phage = "点一下投放一团你设计的病毒",
 	irritant = "点它的头部：缩回头冠，嘴里的吐出来",
+	iron = "点一下撒铁粉，吸掉那片水里的氧气",
 }
 const TIP := {
 	nutrient = "营养投放\n点击培养皿中的位置，投放一团营养物质，吸引附近的细胞。\n藻团靠营养生长；也可以直接在培养皿上点右键投放。",
@@ -26,6 +27,9 @@ const TIP := {
 	current = "洋流引导\n按住从起点拖向终点：拖得越长水流越快（最快 70 µm/s），持续 30 秒。\n用来把生物送到远处的藻场，或把它们冲离危险。",
 	phage = "投放病毒\n在点击处放一团你设计的病毒（80 个，半径 90 µm）。\n它只扎绒游丝。外壳结实的能在水里等很久。",
 	irritant = "刺激头冠\n在喷口守卫头部附近（170 µm 以内）点一下，放一小团刺激物。\n真实的轮虫被碰到会把头冠缩回去：约 6 秒内它吸不了水、吞不了群体。\n嘴里正嚼着群体时刺激它，它会把群体原样吐出来，白掉一截能量。\n头部 400 µm 内裂了甲的群体趁机脱身，之后 12 秒它都不会再吸。\n20 秒内再刺激，它会慢慢习惯，缩回的时间一次比一次短。点不到头部、头冠已缩着都不扣点数。",
+	iron = "撒铁粉
+在点击处撒一片铁粉（半径 220 µm），40 秒内把那里的氧气吸掉，变成一块临时的无氧水。
+原型是远古海洋里的铁：地球上最早的氧气，先被海水里的铁吸收，沉成了一层层红色的条带状铁矿。",
 }
 
 var host: Node2D
@@ -72,6 +76,8 @@ func _process(_delta: float) -> void:
 	# (Only where there is a virus to drop.)
 	var lv: Dictionary = host.level_runner.level if host.level_runner else {}
 	cards.phage.visible = lv.get("interventions", []).has("phage")
+	# (Chapter 6's iron dust takes the phage's place and key.)
+	cards.iron.visible = lv.get("interventions", []).has("iron")
 	# (Level 24's irritant takes the current's place and key.)
 	cards.irritant.visible = lv.get("interventions", []).has("irritant")
 	cards.current.visible = not cards.irritant.visible
@@ -219,11 +225,18 @@ class Card extends Control:
 
 	# The irritant answers to the current's key.
 	static func key_of(k: String) -> String:
+		if k == "iron":
+			return "phage"
 		return "current" if k == "irritant" else k
 
 	# A small drawing of what the tool does.
 	func _icon(c: Vector2, ink: Color, acc: Color, cold: bool) -> void:
 		match kind:
+			"iron":
+				# Rust grains settling.
+				for p in [Vector2(-9, -8), Vector2(-2, -11), Vector2(6, -9), Vector2(-6, -2), Vector2(2, -4), Vector2(9, -1), Vector2(-10, 5), Vector2(-3, 4), Vector2(5, 6), Vector2(0, 11), Vector2(-7, 11), Vector2(8, 11)]:
+					draw_circle(c + p, 1.7, Color(0.72, 0.36, 0.2, ink.a))
+				draw_line(c + Vector2(-12, 14), c + Vector2(12, 14), Color(ink, 0.6), 1.3)
 			"irritant":
 				# A corona drawn in (two closed lobes, cilia folded) and grains.
 				for s in [-1.0, 1.0]:

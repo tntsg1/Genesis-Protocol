@@ -15,6 +15,10 @@ extends RefCounted
 #   species       [{label, params (SimCore.add_species), spawn: [[pos, n, spread]]}]
 #                 or {native = "冰晶游丝", spawn, override?}: one of the Europa
 #                 natives (override: params a level changes)
+#                 role: chapter 6, a species the player designed earlier
+#                 (CampaignSave.look: their name and colour, the level's numbers)
+#   light_band    [y_full, y_dark, power]: light from above (chapter 6)
+#   oxygen        SimCore.set_oxygen params (chapter 6)
 
 const AQUA := Color(0.42, 0.8, 0.88)
 const HONEY := Color(0.96, 0.76, 0.4)
@@ -88,6 +92,8 @@ static func populate(sim: SimCore, cfg: Dictionary, on_species: Callable) -> voi
 	var layout: Dictionary = cfg.get("layout", OPEN_WATER)
 	for spot: Array in cfg.get("lights", []):
 		sim.add_light(spot[0], spot[1], spot[2])
+	if cfg.has("light_band"):
+		sim.add_light_band(cfg.light_band[0], cfg.light_band[1], cfg.light_band[2])
 	sim.set_algae_cap(int(cfg.get("algae_cap", 1500)))
 	var rates: Array = cfg.get("algae_rates", [1.0, 1.0]) # [growth, rot] multipliers
 	sim.set_algae_rates(float(rates[0]), float(rates[1]))
@@ -102,6 +108,12 @@ static func populate(sim: SimCore, cfg: Dictionary, on_species: Callable) -> voi
 			var params := native(sp.native)
 			params.merge(sp.get("override", {}), true) # a level's handicap
 			on_species.call(params, sp.native)
+		elif sp.has("role") and not CampaignSave.look(sp.role).is_empty():
+			var lk := CampaignSave.look(sp.role)
+			var params: Dictionary = sp.params.duplicate()
+			params.name = lk.name
+			params.color = lk.color
+			on_species.call(params, lk.name)
 		else:
 			on_species.call(sp.params, sp.label)
 		for at: Array in sp.get("spawn", []):
@@ -109,6 +121,8 @@ static func populate(sim: SimCore, cfg: Dictionary, on_species: Callable) -> voi
 		n += 1
 	# The water: the zones, and the natives evolved in them.
 	Ecology.apply(sim, layout)
+	if cfg.has("oxygen"):
+		sim.set_oxygen(cfg.oxygen)
 	if cfg.get("natives", false):
 		for p: Dictionary in Natives.load_for(layout):
 			var params := p.duplicate()

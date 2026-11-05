@@ -13,7 +13,7 @@ const LIST := [
 	{id = "cnido", name = "刺丝囊", en = "CNIDOCYST", opens = "2-1",
 		desc = "利用刺细胞攻击并捕食其他细胞。安装后，生命的体型会变大，寿命也会延长。它只能捕食比自己小的细胞，不能再吃藻团。",
 		needs = {cond = [Rules.C_SEE_PREY, Rules.C_PREY_NEAR, Rules.C_PREY_SMALL, Rules.C_SEE_SHELL], act = [Rules.A_HUNT, Rules.A_SCAVENGE]},
-		body = {diet = 1, radius = 7.0, lifespan = 150.0}},
+		body = {diet = 1, radius = 7.0, lifespan = 150.0}, pair = "diet"},
 	{id = "silica", name = "硅质壳", en = "SILICA SHELL", opens = "2-2", pair = "armour",
 		desc = "硅质外壳能挡掉约三分之二的攻击伤害，但会增加重量，速度降低 10%。", needs = {}, body = {bite_taken = 0.35, speed_mult = 0.9}},
 	{id = "spines", name = "棘刺", en = "SPINES", opens = "2-2", pair = "armour",
@@ -36,6 +36,14 @@ const LIST := [
 		desc = "能记住一个地方和一个数。", needs = {}, body = {}},
 	{id = "crispr", name = "记忆片段", en = "MEMORY FRAGMENT", opens = "4-2",
 		desc = "被扎中时有一点机会把病毒的 DNA 剪碎，活下来，并留下一段当记忆。有记忆的细胞和它的后代，再被扎也不怕。", needs = {cond = [Rules.C_IMMUNE]}, body = {crispr = 0.12}},
+	# Chapter 6 (DECISIONS Q211 / Q206 / Q220): the way a species eats. With
+	# the cnidocyst they make one pair: one way of eating per species.
+	{id = "sulfase", name = "硫化酶", en = "SULFIDE ENZYME", opens = "6-1", pair = "diet",
+		desc = "分解热泉冒出的硫化物来获得能量（原型：硫细菌）。装上后不再吃藻团，待在热泉附近就能持续获得能量，离得越远越少。",
+		needs = {}, body = {diet = 2}},
+	{id = "photo", name = "光合膜", en = "PHOTOSYNTHETIC MEMBRANE", opens = "6-2", pair = "diet",
+		desc = "在光里制造养分并放出氧气（原型：蓝细菌）。装上后不再进食，只靠光获得能量，越亮越多；游速降低 40%。",
+		needs = {}, body = {diet = 3, speed_mult = 0.6}},
 ]
 
 
