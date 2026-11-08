@@ -164,7 +164,7 @@ func _level17() -> void:
 	lr.finish()
 	check(await _until(func() -> bool: return is_instance_valid(lr.report), 10.0), "4-3: the report opens")
 	var hints: Array = lr.report._latent_hints()
-	check(not hints.is_empty() and str(hints[0]).contains("方向是对的"), "4-3: the guided plan is not blamed (%s)" % str(hints))
+	check(not hints.is_empty() and str(hints[0]).begins_with("再试一次"), "4-3: the guided plan is not blamed (%s)" % str(hints))
 	lr.exit_level()
 	await _until(func() -> bool: return scene.level_runner == null)
 
@@ -188,7 +188,7 @@ func _level16() -> void:
 	await _until(func() -> bool: return g.ring.rect.size != Vector2.ZERO, 3.0)
 	check(g.ring.rect.size != Vector2.ZERO, "4-2: its slot is ringed")
 	d.deck_editor.set_condition(1, 2, Rules.C_IMMUNE)
-	check(await _until(func() -> bool: return _says("前面的“不”"), 8.0), "4-2: then the 不")
+	check(await _until(func() -> bool: return _says("前面的「不」"), 8.0), "4-2: then the 不")
 	await create_timer(0.5).timeout
 	check(g.ring.rect.size != Vector2.ZERO, "4-2: the 不 is ringed")
 	d.deck_editor.toggle_neg(1, 2)
@@ -267,7 +267,7 @@ func _level15() -> void:
 	lr.finish()
 	check(await _until(func() -> bool: return is_instance_valid(lr.report), 10.0), "4-1: the report opens")
 	var hints: Array = lr.report._phage_hints()
-	check(not hints.is_empty() and str(hints[0]).contains("方向是对的"), "4-1: with the card in, the report says the direction is right (%s)" % str(hints))
+	check(not hints.is_empty() and str(hints[0]).contains("方向没错"), "4-1: with the card in, the report says the direction is right (%s)" % str(hints))
 	lr.exit_level()
 	await _until(func() -> bool: return scene.level_runner == null)
 	await create_timer(0.5).timeout
