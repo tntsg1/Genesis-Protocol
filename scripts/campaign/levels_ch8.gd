@@ -1,0 +1,248 @@
+class_name LevelsCh8
+extends RefCounted
+# Chapter 8 · 腐土篇 (design/第八章_腐土篇方案.md, DECISIONS Q242–Q263):
+# planet three, an acid swamp. The mud in layers (oxygen from above,
+# hydrogen sulfide from below), decomposers, the endosymbiont, toxins and
+# resistance, acid rain, a slime mould. Levels 35–39. The copy is a first
+# draft for the user to rewrite.
+
+const SHIP_AI := {name = "创生协议", title = "播种飞船 · 主控 AI"}
+
+# The swamp: light and oxygen from above, sulfide from below.
+const SWAMP := {
+	name = "星球三 · 酸性沼泽",
+	code = "P3-00",
+	base = {temp = 18.0, acid = 0.05, radiation = 0.05},
+	zones = [],
+}
+const LIGHT_BAND := [250.0, 950.0, 0.55] # full light above y 250, none below 950
+# The layers: oxygen full above 650, none below 1150; sulfide from 1150, full at 1850.
+const MUD := {o2_full = 650.0, o2_zero = 1150.0, h2s_from = 1150.0, h2s_full = 1850.0, h2s = 1.0, relax = 0.15, harm = 1.4, safe = 0.15}
+# 8-2: a shallower mud, the light deeper (the anaerobic host's middle water).
+const MUD_SHALLOW := {o2_full = 450.0, o2_zero = 900.0, h2s_from = 1300.0, h2s_full = 1950.0, h2s = 1.0, relax = 0.15, harm = 1.4, safe = 0.15}
+# 8-1: the sulfide thinner (the mud dwellers were too many).
+const MUD_THIN := {o2_full = 650.0, o2_zero = 1150.0, h2s_from = 1150.0, h2s_full = 1850.0, h2s = 0.5, relax = 0.15, harm = 1.4, safe = 0.1}
+const LIGHT_DEEP := [250.0, 1150.0, 0.55]
+const OXYGEN := {on = true, start = 0.0, emit = 0.01, harm = 6.0, decay = 0.0015, sulfide = 0.02, need = 0.15, aero_mult = 1.6, aero_low = 0.6, fac_mult = 1.4, fac_low = 0.9}
+
+const MAYFLY_COLOR := Color(0.62, 0.78, 0.46)
+const PURPLE := Color(0.72, 0.42, 0.86)
+const RIVAL_COLOR := Color(0.92, 0.74, 0.32)
+# 蜉游丝: short-lived grazers of the top water; their shells feed the decomposers.
+const MAYFLY := {name = "蜉游丝", color = MAYFLY_COLOR, diet = 0, radius = 5.0, speed = 2.2, vision = 2.0, armor = 1.0,
+	attack = 1.0, fertility = 3.2, efficiency = 2.4, neural = 3.0, lifespan = 50.0, cohesion = 0.1, temp_opt = 18.0, temp_tol = 3.0, resp = 2}
+# 紫光游丝 (purple non-sulfur bacteria, the mitochondrion's kin): small, breathes oxygen.
+const PURPLE_BUG := {name = "紫光游丝", color = PURPLE, diet = 0, radius = 3.6, speed = 1.6, vision = 1.6, armor = 1.0,
+	attack = 1.0, fertility = 3.0, efficiency = 2.6, neural = 3.0, lifespan = 80.0, cohesion = 0.2, temp_opt = 18.0, temp_tol = 3.0, resp = 2, symbiont = true}
+# 抢食游丝: breeds fast, eats the algae bare.
+const RIVAL := {name = "抢食游丝", color = RIVAL_COLOR, diet = 0, radius = 5.0, speed = 2.6, vision = 2.6, armor = 1.0,
+	attack = 1.0, fertility = 2.4, efficiency = 2.6, neural = 3.0, lifespan = 90.0, cohesion = 0.1, temp_opt = 18.0, temp_tol = 3.0, resp = 2}
+
+# The slime mould's six food points (8-5).
+const SLIME_POINTS := [Vector2(1100, 330), Vector2(1760, 640), Vector2(1760, 1480), Vector2(1100, 1820), Vector2(440, 1480), Vector2(440, 640)]
+
+const LEVELS := [
+	{
+		id = "8-1", index = 35, name = "腐殖", en = "HUMUS", depth = 0.6,
+		director = SHIP_AI,
+		teach = "分解者与泥层分带",
+		arrival3 = true,
+		brief = "第三颗星球是一片酸性沼泽。上层的水有光有氧；越往下，泥里的氧越少、硫化氢越多。\n\n浅水里的蜉游丝活得快死得也快，尸体一层层落下，养分锁在空壳里，藻团长不起来。\n\n这一关你设计两种生命：一种装上「分解酶」，吃空壳，把养分还给水；另一种放进深处的泥层，靠硫化氢活下去。",
+		ai_log = "研究日志 0035：星球三，酸性沼泽。\n\n地球上的沼泽泥也分层：上面是用氧的细菌，下面是怕氧、吃硫化氢的细菌，颜色一层一层，像彩虹。科学家把泥装进玻璃柱里养，叫它维诺格拉德斯基柱。",
+		world = {
+			name = "星球三 · 酸性沼泽",
+			layout = SWAMP,
+			lights = [],
+			light_band = LIGHT_BAND,
+			algae_cap = 300,
+			algae_seed = [90, 10.0],
+			algae_rates = [0.35, 1.0],
+			algae_dark = 0.0,
+			oxygen = OXYGEN,
+			mud = MUD_THIN,
+			shells = [[Vector2(1100, 800), 520.0, 260, 30.0]],
+			species = [{label = "蜉游丝", params = MAYFLY, spawn = [[Vector2(1100, 450), 60, 300.0]]}],
+		},
+		release = {at = Vector2(1100, 760), count = 30},
+		release_b = {at = Vector2(1100, 1800), count = 30},
+		species = [
+			{label = "分解者", name = "分解者 A", organs = ["decomp"], resp = 2, genes = [2.0, 2.5, 1.0, 1.0, 2.5, 3.0, 3.0, 3.0]},
+			{label = "泥层生物", name = "泥层生物 B", organs = ["sulfase"], resp = 1, genes = [1.5, 2.0, 1.0, 1.0, 2.5, 3.0, 3.0, 3.0]},
+		],
+		resp = 2,
+		resp_open = true,
+		lifespan = 140.0,
+		time_limit = 360.0,
+		budget = 16, star_budget = 12,
+		genes_open = [0, 1, 4, 5],
+		fixed = {2: 1.0, 3: 1.0, 6: 3.0, 7: 3.0},
+		temp_fixed = 18.0,
+		organ_slots = 1,
+		pages_open = ["genome", "rules", "library", "handbook"],
+		interventions = ["nutrient", "membrane", "current", "stir"],
+		goal = {kind = "coexist_algae", n = 40, n2 = 30, algae = 1500, text = "坚持到第 6 分钟，同时保证：\n分解者至少 40 只。\n泥层生物至少 30 只。\n藻团的总能量回升到 1500 以上。"},
+		challenge = {kind = "alive_b", n = 80, text = "第 6 分钟时，泥层生物至少有 80 只。"},
+		threats = ["两物种设计\n点击顶部的 A、B 分别设计分解者和泥层生物。任何一种灭绝，实验都会结束。", "\n新器官：分解酶\n装上后不吃藻团，改吃空壳；吃的时候有一部分养分留在水里，附近的藻团会长得更快。", "\n泥层分带\n上层有光有氧；中间氧越来越少；最下面没有氧，硫化氢很浓。好氧的生命进了硫化氢里会中毒，厌氧的生命碰到氧会中毒。", "\n新工具：搅动泥层（按 5）\n把一片泥水搅一搅：30 秒内氧气被带下去，硫化氢被冲淡。"],
+		hints = ["分解者是不是游进了深处，被硫化氢毒死？", "泥层生物是不是被投到了有氧的水里？", "藻团长不起来？分解者要待在浅水的空壳堆里，养分才会回到有光的地方。"],
+		tips = ["分解者用好氧呼吸，规则里加「氧气高于 10% 」相关的卡，别让它往下游。", "泥层生物装着硫化酶，待在最下面就能一直获得能量。", "空壳多的地方按 5 搅动一下，让分解者下去吃深一点的空壳。"],
+		tutorial = true,
+	},
+	{
+		id = "8-2", index = 36, name = "吞而不化", en = "SWALLOWED WHOLE", depth = 1.1,
+		director = SHIP_AI,
+		teach = "内共生：把会用氧的细菌留在体内",
+		brief = "浅水里漂着一种很小的紫色细菌：紫光游丝。它特别会用氧。\n\n给你的生命装上「吞噬泡」。用「吞下不消化」把它整个吞进去——不消化它，让它住在体内帮你用氧。分裂时，两个后代都会带上它。\n\n带着共生菌的细胞有氧时产能大增，但个子更大、游得更慢。",
+		ai_log = "研究日志 0036：二十亿年前，地球上一个细胞吞下了一个会用氧的细菌，却没有把它消化掉。那个细菌后来变成了线粒体。\n\n从那以后，复杂的细胞——真核细胞——才出现。你身体里的每个细胞都有它的后代。",
+		world = {
+			name = "星球三 · 酸性沼泽",
+			layout = SWAMP,
+			lights = [],
+			light_band = LIGHT_DEEP,
+			algae_cap = 700,
+			algae_seed = [300, 20.0],
+			algae_rates = [1.0, 1.0],
+			algae_dark = 0.0,
+			algae_patches = [[Vector2(760, 940), 120.0, 30, 24.0], [Vector2(1100, 960), 120.0, 30, 24.0], [Vector2(1440, 940), 120.0, 30, 24.0]],
+			oxygen = OXYGEN,
+			mud = MUD_SHALLOW,
+			ch8 = {symb_mult = 2.0, symb_upkeep = 1.15},
+			species = [{label = "紫光游丝", params = PURPLE_BUG, spawn = [[Vector2(1100, 720), 120, 380.0]]}],
+		},
+		release = {at = Vector2(1100, 900), count = 30},
+		resp = 1,
+		lifespan = 140.0,
+		time_limit = 360.0,
+		budget = 12, star_budget = 9,
+		genes_open = [0, 1, 4, 5],
+		fixed = {2: 1.0, 3: 1.0, 6: 4.0, 7: 3.0},
+		temp_fixed = 18.0,
+		organ_slots = 1,
+		require_organs = ["phago"],
+		pages_open = ["genome", "rules", "library", "handbook"],
+		interventions = ["nutrient", "membrane", "current", "stir"],
+		goal = {kind = "symb_end", n = 60, text = "第 6 分钟时，带着共生菌的细胞至少 60 只。"},
+		challenge = {kind = "symb_by", n = 40, seconds = 180.0, text = "第 3 分钟之前，带着共生菌的细胞达到 40 只。"},
+		threats = ["新器官：吞噬泡\n能把紫光游丝整个吞进去不消化。规则里用「吞下不消化」；「带着共生菌」可以加“不”，写给还没吞到的细胞。", "\n共生菌\n你的生命是厌氧的：氧气会毒害它。带着共生菌的细胞不再怕氧，有氧时产能大约 ×2；但游速 -18%，日常耗能 +15%。分裂时两个后代都带上。", "\n紫光游丝不多\n吞一只少一只。先吞到的细胞要多生。"],
+		hints = ["吞到共生菌的细胞多吗？点一只细胞看看。", "带着共生菌的细胞是不是跑进了没氧的深处？"],
+		tips = ["最上面加一张：「不 带着共生菌 → 吞下不消化」。", "吞到以后让它们待在有氧的浅水里，多分裂。"],
+		tutorial = true,
+	},
+	{
+		id = "8-3", index = 37, name = "抗菌素", en = "ANTIBIOTICS", depth = 1.7,
+		director = SHIP_AI,
+		teach = "毒素与耐药：轮换两种毒素",
+		brief = "浅水的藻场被一种繁殖很快的抢食游丝占满了。\n\n给你的生命装上「毒素腺」：放出毒云压制它们，自己不怕。但挨过毒还活着的抢食游丝会慢慢耐药，后代也耐药。\n\n毒素有两种。对毒素甲耐药的，对毒素乙不耐药——轮换着用。",
+		ai_log = "研究日志 0037：地球土壤里的链霉菌会分泌抗生素，压住身边的细菌。人类从它身上找到了链霉素。\n\n可细菌也会耐药。用得越多，耐药的就越多。",
+		world = {
+			name = "星球三 · 酸性沼泽",
+			layout = SWAMP,
+			lights = [],
+			light_band = LIGHT_BAND,
+			algae_cap = 650,
+			algae_seed = [380, 22.0],
+			algae_rates = [0.5, 1.0],
+			algae_dark = 0.0,
+			oxygen = OXYGEN,
+			mud = MUD,
+			ch8 = {tox_emit = 3.0, tox_harm = 12.0, res_gain = 0.035, res_loss = 0.012},
+			species = [{label = "抢食游丝", params = RIVAL, spawn = [[Vector2(1100, 500), 120, 420.0]]}],
+		},
+		release = {at = Vector2(1100, 760), count = 30},
+		resp = 2,
+		lifespan = 140.0,
+		time_limit = 360.0,
+		budget = 12, star_budget = 9,
+		genes_open = [0, 1, 4, 5],
+		fixed = {2: 1.0, 3: 1.0, 6: 4.0, 7: 3.0},
+		temp_fixed = 18.0,
+		organ_slots = 1,
+		require_organs = ["toxin"],
+		pages_open = ["genome", "rules", "library", "handbook"],
+		interventions = ["nutrient", "membrane", "current", "stir"],
+		goal = {kind = "clear_rival", rival = 0, n = 80, rival_max = 40, text = "第 6 分钟时，你的种群至少 80 只，抢食游丝少于 40 只。"},
+		challenge = {kind = "both_toxins", text = "两种毒素都用上。"},
+		threats = ["新器官：毒素腺\n「分泌毒素甲」「分泌毒素乙」在身边放出毒云，伤害别的物种，不伤自己；每秒耗一点能量。", "\n耐药\n挨过毒还活着的抢食游丝会慢慢耐药，分裂时传给后代。不用的那种毒素，耐药会慢慢退去。", "\n新条件：别的物种在\n有别的物种进入 X µm 以内。"],
+		hints = ["抢食游丝是不是越毒越多？看看它们对哪种毒素耐药了。", "放毒太多，自己会饿：放毒也要耗能。"],
+		tips = ["「别的物种在 60 µm → 分泌毒素甲」放在吃东西的卡前面。", "另一种状态里用毒素乙：比如用「在本状态超过 40 秒」在两种状态之间来回切换。"],
+		tutorial = true,
+	},
+	{
+		id = "8-4", index = 38, name = "酸雨", en = "ACID RAIN", depth = 2.3,
+		director = SHIP_AI,
+		teach = "耐酸：熬过酸雨",
+		brief = "沼泽上空时常下酸雨。酸从水面往下渗，越往下渗得越慢。\n\n躲进深处能避开最酸的时候，可深处没有光，也越来越缺氧。\n\n基因组页新开放了「耐酸」：越耐酸，酸伤越小，但平时越耗能。",
+		ai_log = "研究日志 0038：地球上有些细菌活在比醋还酸的水里，比如酸性矿坑里的嗜酸菌。它们把酸挡在细胞外面，代价是要不停地往外泵。",
+		world = {
+			name = "星球三 · 酸性沼泽",
+			layout = SWAMP,
+			lights = [],
+			light_band = LIGHT_BAND,
+			algae_cap = 380,
+			algae_seed = [340, 22.0],
+			algae_rates = [0.9, 1.0],
+			algae_dark = 0.0,
+			oxygen = OXYGEN,
+			mud = MUD,
+			ch8 = {rain_depth = 260.0, rain_rate = 0.15},
+			species = [],
+		},
+		events = [{kind = "rain", dry = 70.0, wet = 35.0, level = 7.0, top = 60.0, offset = 0.0}],
+		release = {at = Vector2(1100, 700), count = 30},
+		resp = 2,
+		resp_open = true,
+		acid_open = true,
+		lifespan = 140.0,
+		time_limit = 330.0,
+		budget = 12, star_budget = 9,
+		genes_open = [0, 1, 4, 5],
+		fixed = {2: 1.0, 3: 1.0, 6: 4.0, 7: 3.0},
+		temp_fixed = 18.0,
+		organ_slots = 0,
+		pages_open = ["genome", "rules", "library", "handbook"],
+		interventions = ["nutrient", "membrane", "current", "stir"],
+		goal = {kind = "rains", rains = 3, n = 320, text = "熬过 3 场酸雨：第三场雨停时，种群至少有 320 只。"},
+		challenge = {kind = "acid_max", n = 900, text = "被酸死的细胞不超过 900 只。"},
+		threats = ["酸雨\n每 105 秒下一场 35 秒的酸雨。酸从水面往下渗，越深渗得越慢；雨停后慢慢退去。右上角会倒数下一场雨。", "\n新开放：耐酸\n在基因组页「最适水温」下面。越耐酸，酸伤越小，但日常耗能越多。", "\n躲进深处\n深处的酸来得晚，但没有光、缺氧，硫化氢也越来越浓。"],
+		hints = ["是不是在酸雨里成片死去？试试调高耐酸，或在雨前往深处躲。", "耐酸调得太高，平时是不是饿得慢慢少了？"],
+		tips = ["耐酸调到 50% 左右，酸伤少一半，平时多耗一点。", "兼性呼吸的细胞在缺氧的中层也能活：雨来时躲下去。"],
+		tutorial = true,
+	},
+	{
+		id = "8-5", index = 39, name = "菌毯意识", en = "THE SLIME MIND", depth = 3.0,
+		director = SHIP_AI,
+		teach = "Boss：会找最短路的黏菌",
+		brief = "沼泽中央有一团黄色的黏菌。它朝六个藻场伸出管道，总能找到最短的路；管道经过的地方，细胞都会被吞掉。连上的藻场，它就吸干。\n\n两条路：抢先占住四个藻场（你的细胞在那里够多、待得够久，藻场就归你，它连上也吸不到）；或者用毒素烧断它的管道、用隔离膜挡住它，让它饿死。",
+		ai_log = "研究日志 0039：地球上的多头绒泡菌是一个巨大的单细胞，没有大脑，却能在迷宫里找到最短路。科学家把燕麦片按东京周边城市的位置摆好，它长出的管道网，和东京的铁路网惊人地像。",
+		world = {
+			name = "星球三 · 酸性沼泽",
+			layout = SWAMP,
+			lights = [[Vector2(1100, 1100), 1000.0, 0.45]],
+			algae_cap = 700,
+			algae_seed = [120, 22.0],
+			algae_rates = [0.9, 1.0],
+			algae_dark = 0.0,
+			algae_patches = [[SLIME_POINTS[0], 110.0, 40, 30.0], [SLIME_POINTS[1], 110.0, 40, 30.0], [SLIME_POINTS[2], 110.0, 40, 30.0], [SLIME_POINTS[3], 110.0, 40, 30.0], [SLIME_POINTS[4], 110.0, 40, 30.0], [SLIME_POINTS[5], 110.0, 40, 30.0]],
+			species = [],
+		},
+		slime = {center = Vector2(1100, 1100), points = SLIME_POINTS, energy = 0.6, full = 3000.0, burn = 3.0, len_cost = 0.002, feed = 2.0, speed = 9.0, reach = 12.0, drain = 8.0, gain = 0.25, cut = 0.25, regrow = 8.0, core = 70.0,
+			hold_r = 150.0, hold_n = 16, hold_t = 15.0, need = 4},
+		release = {at = Vector2(1100, 600), count = 30},
+		resp = 2,
+		lifespan = 140.0,
+		time_limit = 420.0,
+		budget = 15, star_budget = 12,
+		genes_open = [0, 1, 4, 5],
+		fixed = {2: 1.0, 3: 1.0, 6: 5.0, 7: 3.0},
+		temp_fixed = 18.0,
+		organ_slots = 2,
+		euk_open = true,
+		pages_open = ["genome", "rules", "library", "handbook"],
+		interventions = ["nutrient", "membrane", "current"],
+		goal = {kind = "slime", text = "占住 6 个藻场中的 4 个，或让黏菌饿死。"},
+		challenge = {kind = "slime_by", seconds = 300.0, text = "第 5 分钟之前赢下这一关。"},
+		threats = ["黏菌的管道\n黏菌从中央朝六个藻场伸管道，碰到管道的细胞会被吞掉。管道连上的藻场，它就吸干。", "\n占住藻场\n某个藻场 150 µm 内你的细胞有 16 只以上、并保持 15 秒，那个藻场就归你：插上你的颜色，黏菌连上也吸不到。", "\n切断管道\n毒云能烧断管道（断口以外的部分会死掉），隔离膜能挡住管道生长。黏菌一直在耗能，管道越长越耗能；吃不到东西就会饿死。", "\n新开放：真核\n基因组页顶部的「真核」开关：一出生就带着共生菌。"],
+		hints = ["管道已经连上的藻场很难占住：先占还没连上的。", "细胞是不是成群撞上管道？加一张「别的物种在 → 逃离」试试。"],
+		tips = ["装上毒素腺，在管道旁放毒能把它烧断。", "先用隔离膜挡住最近的一条管道，争取时间占住藻场。"],
+		tutorial = true,
+	},
+]

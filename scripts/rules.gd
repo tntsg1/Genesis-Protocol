@@ -3,8 +3,8 @@ extends RefCounted
 # Behaviour-card vocabulary (GDD 3.2). Ids match SimCore's Cond / Act enums;
 # a card is {c1, t1, c2, t2, act} with c = 0 meaning "no condition".
 
-enum { C_NONE, C_ENERGY_BELOW, C_ENERGY_ABOVE, C_SEE_ALGAE, C_PREDATOR_NEAR, C_SEE_PREY, C_CROWD, C_ATTACKED, C_AGE_ABOVE, C_SEE_SHELL, C_TEMP_BAD, C_SIGNAL_A, C_SIGNAL_B, C_PREY_NEAR, C_PREY_SMALL, C_STATE_TIME, C_PEER_STATE, C_IMMUNE, C_O2_ABOVE, C_FAR_MEM, C_NIGHT, C_DAY }
-enum { A_SEEK_ALGAE, A_FLEE, A_HUNT, A_FOLLOW, A_REST, A_DIVIDE, A_WANDER, A_SCAVENGE, A_EMIT_A, A_EMIT_B, A_SEEK_COMFORT, A_TO_FORAGE, A_TO_ALERT, A_TO_BREED, A_TO_SLEEP, A_SEEK_SIG_A, A_SEEK_SIG_B, A_SECRETE, A_DISPERSE, A_INDUCE, A_AGGREGATE, A_AVOID_O2, A_SEEK_O2, A_REMEMBER, A_RETURN, A_TO_SPORE }
+enum { C_NONE, C_ENERGY_BELOW, C_ENERGY_ABOVE, C_SEE_ALGAE, C_PREDATOR_NEAR, C_SEE_PREY, C_CROWD, C_ATTACKED, C_AGE_ABOVE, C_SEE_SHELL, C_TEMP_BAD, C_SIGNAL_A, C_SIGNAL_B, C_PREY_NEAR, C_PREY_SMALL, C_STATE_TIME, C_PEER_STATE, C_IMMUNE, C_O2_ABOVE, C_FAR_MEM, C_NIGHT, C_DAY, C_SYMB, C_RIVAL_NEAR }
+enum { A_SEEK_ALGAE, A_FLEE, A_HUNT, A_FOLLOW, A_REST, A_DIVIDE, A_WANDER, A_SCAVENGE, A_EMIT_A, A_EMIT_B, A_SEEK_COMFORT, A_TO_FORAGE, A_TO_ALERT, A_TO_BREED, A_TO_SLEEP, A_SEEK_SIG_A, A_SEEK_SIG_B, A_SECRETE, A_DISPERSE, A_INDUCE, A_AGGREGATE, A_AVOID_O2, A_SEEK_O2, A_REMEMBER, A_RETURN, A_TO_SPORE, A_SWALLOW, A_TOXIN_A, A_TOXIN_B }
 # Gene-expression states (DECISIONS 第十一轮): each has its own cards.
 enum { S_FORAGE, S_ALERT, S_BREED, S_SLEEP, S_SPORE }
 # [name, en, what it does to the body, opens]
@@ -40,6 +40,8 @@ const CONDS := [
 	["离记忆点超过", "distance", 20, 600, 150, 10, "离自己记住的地方超过 X µm。还没记住任何地方时不成立（要记忆泡）。"],
 	["天黑了", "", 0, 0, 0, 0, "长夜开始了：没有光，水会结冰。"],
 	["天亮了", "", 0, 0, 0, 0, "白天：有光，水温正常。"],
+	["带着共生菌", "", 0, 0, 0, 0, "体内有一只吞下没消化的共生菌（要吞噬泡）。可以加“不”，写给还没吞到的细胞"],
+	["别的物种在", "distance", 15, 200, 60, 5, "有别的物种的细胞进入 X µm 以内"],
 ]
 # [name, help]
 const ACTS := [
@@ -69,12 +71,15 @@ const ACTS := [
 	["记住这里", "把现在的位置记下来（只记一个地方，新的会覆盖旧的），不占用这一拍，下面的卡照常检查。分裂出来的后代也记得（要记忆泡）。"],
 	["回到记忆点", "游回记住的地方；被冰挡住时沿着冰壁绕。还没记住任何地方、或已经在那里时跳过（要记忆泡）。"],
 	["进入芽孢", "切换到「芽孢」状态：先花约 8 秒形成芽孢，形成后不耗能、不怕冷、不会被吃（要芽孢外壳）。"],
+	["吞下不消化", "游向视野里的紫光游丝，整个吞下去但不消化：它留在体内帮你用氧产能，分裂时两个后代都带上。已经带着一只、或看不见紫光游丝时跳过（要吞噬泡）。"],
+	["分泌毒素甲", "在身边放出毒素甲（每秒耗一点能量）：毒云会扩散、慢慢消退，伤害别的物种，不伤自己。挨过毒还活着的细胞会慢慢耐药，后代也耐药（要毒素腺）。"],
+	["分泌毒素乙", "在身边放出毒素乙。对毒素甲耐药的细胞，对毒素乙不耐药：轮换着用（要毒素腺）。"],
 ]
 const SLOTS := [3, 4, 5, 6, 8]
 # Where each library piece opens in the campaign (DECISIONS 第十轮 Q7/Q11):
 # a level id ("1-4") or a whole chapter ("2"). The sandbox has them all.
-const COND_OPENS := ["", "1-3", "1-3", "1-3", "1-3", "2-1", "1-5", "2-2", "1-5", "2", "1-4", "3-1", "3-4", "2-1", "2-1", "2-3", "3-2", "4-2", "6-3", "7-1", "7-2", "7-2"]
-const ACT_OPENS := ["1-3", "1-3", "2-1", "1-5", "1-3", "1-3", "1-3", "2", "3-1", "3-4", "1-4", "2-3", "2-4", "2-5", "2-3", "3-1", "3-4", "3-3", "4-1", "4-3", "5-1", "6-3", "6-4", "7-1", "7-1", "7-2"]
+const COND_OPENS := ["", "1-3", "1-3", "1-3", "1-3", "2-1", "1-5", "2-2", "1-5", "2", "1-4", "3-1", "3-4", "2-1", "2-1", "2-3", "3-2", "4-2", "6-3", "7-1", "7-2", "7-2", "8-2", "8-3"]
+const ACT_OPENS := ["1-3", "1-3", "2-1", "1-5", "1-3", "1-3", "1-3", "2", "3-1", "3-4", "1-4", "2-3", "2-4", "2-5", "2-3", "3-1", "3-4", "3-3", "4-1", "4-3", "5-1", "6-3", "6-4", "7-1", "7-1", "7-2", "8-2", "8-3", "8-3"]
 
 
 # “不” on a condition and “或” between two open from level 7 (DECISIONS Q21).

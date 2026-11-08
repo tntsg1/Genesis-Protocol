@@ -106,6 +106,8 @@ public:
 		C_FAR_MEM,       // further than t from the spot it remembers (chapter 7; needs the memory vesicle)
 		C_NIGHT,         // the long night is on (chapter 7)
 		C_DAY,           // it is day
+		C_SYMB,          // carries an endosymbiont (chapter 8; needs the phagosome)
+		C_RIVAL_NEAR,    // a cell of another species closer than t (chapter 8)
 		C_COUNT,
 	};
 	enum Act : uint8_t {
@@ -135,6 +137,9 @@ public:
 		A_REMEMBER,      // remember this spot (chapter 7; passes to the daughters)
 		A_RETURN,        // swim back to the spot it remembers, along the ice where it blocks
 		A_TO_SPORE,      // switch to the spore state (chapter 7; needs the spore coat)
+		A_SWALLOW,       // swallow a symbiont cell without digesting it (chapter 8; needs the phagosome)
+		A_TOXIN_A,       // release toxin A round itself (chapter 8; needs the toxin gland)
+		A_TOXIN_B,
 		A_COUNT,
 	};
 	static constexpr int MAX_CARDS = 8;
@@ -233,6 +238,14 @@ public:
 		// more with oxygen, little without), 3 facultative (both, each a little worse).
 		int resp = 0;
 		float slow_divide = 1.0f; // chapter 7 (寿命): a long life divides this much dearer
+		// Chapter 8: a decomposer (分解酶) eats shells for food and gives this
+		// share of what it takes back to the water at once; a phagocyte (吞噬泡)
+		// can swallow a symbiont; a symbiont is what it swallows; a eukaryote
+		// is born with one; a toxin gland (毒素腺) makes it immune to toxins;
+		// acid_tol 0..1 (耐酸): acid costs less, the upkeep more.
+		float decomp = 0.0f;
+		bool phago = false, symbiont = false, eukaryote = false, toxin = false;
+		float acid_tol = 0.0f;
 		bool reseed = true; // a chemosynthetic native drifts back out of the vents now and then (not a player's)
 		std::vector<Card> deck; // founders start with this deck
 		int alive = 0;
@@ -257,6 +270,8 @@ public:
 	struct Scan {
 		int threat = -1, prey = -1, food = -1, carcass = -1, flock = 0, lure = -1;
 		int cfood = -1; // chapter 6: a producer cell a grazer can eat
+		int symb_t = -1; // chapter 8: the nearest symbiont cell in sight (a phagocyte)
+		float rival_d = 1e9f; // chapter 8: the nearest cell of another species
 		float fx = 0, fy = 0, sx = 0, sy = 0, threat_d = 1e9f;
 		int ncand = 0;
 		int peer[5] = { -1, -1, -1, -1, -1 }; // nearest peer in sight in each state
@@ -361,6 +376,66 @@ private:
 	std::vector<Vector2> helio_spots;
 	std::vector<int> held; // the heliozoan has this cell (1) or not
 	void step_helio(float dt);
+	// --- chapter 8 ---
+	// Mud layers (8-1 on): fixed profiles of oxygen from above and hydrogen
+	// sulfide from below (the chem field: a chemosynthetic cell feeds on it,
+	// it poisons an aerobe). The water's oxygen is pulled back toward the
+	// profile; stirring (搅动泥层) carries oxygen down and thins the sulfide
+	// for a while.
+	bool mud_on = false;
+	float mud_relax = 0.15f, h2s_harm = 1.2f, h2s_safe = 0.15f, stir_o2 = 0.7f;
+	std::vector<float> mud_o2, mud_h2s;
+	struct StirSpot {
+		float x, y, r, life, ttl;
+	};
+	std::vector<StirSpot> stirs;
+	float stir_rebuild = 0.0f;
+	float stir_at(float wx, float wy) const;
+	// Acid rain (8-4): the rain's acid per field cell, soaking down slowly
+	// (the deeper, the slower), draining away faster once it stops.
+	std::vector<float> rain;
+	float rain_level = 0.0f, rain_top = 0.0f, rain_depth = 350.0f, rain_rate = 0.12f;
+	// Toxins (8-3): two fields; resistance per cell, gained by living
+	// through them, passed to the daughters, slowly lost without them.
+	std::vector<float> tox_a, tox_b;
+	std::vector<float> res_a, res_b;
+	std::vector<uint8_t> symb; // carries an endosymbiont (8-2)
+	std::vector<uint8_t> emitting_tox; // put out toxin this tick (drawn)
+	float tox_harm = 4.0f, tox_emit = 0.8f, tox_cost = 0.5f, tox_decay = 0.12f, tox_diffuse = 2.0f;
+	float res_gain = 0.06f, res_loss = 0.006f, res_max = 0.95f;
+	float symb_mult = 1.8f, symb_speed = 0.82f, symb_upkeep = 1.25f;
+	int swallowed = 0;
+	void step_ch8(float dt);
+	// --- chapter 8 boss ---
+	// 8-5: a slime mould (菌毯意识, Physarum) at the centre puts out tubes to
+	// the food points, each the shortest way it can find (bending round
+	// membranes and ice); a tube engulfs the cells it lies across; a
+	// connected point feeds it unless the player holds it; toxin burns a
+	// tube through. It burns all the while, more the longer its tubes, and
+	// starves when the food stops coming.
+	struct SlimeTube {
+		std::vector<Vector2> pts;
+		std::vector<float> dmg;
+		int target = -1;
+		bool done = false;
+		float ang = 0.0f;
+		float wait = 0.0f;
+	};
+	struct SlimePoint {
+		float x, y;
+		int owner = 0; // 0 nobody, 1 the player
+		bool linked = false;
+	};
+	bool slime_on = false, slime_dead = false;
+	float slime_x = 1100.0f, slime_y = 1100.0f, slime_core = 60.0f;
+	float slime_e = 0.0f, slime_full = 2000.0f, slime_burn = 2.0f, slime_len_cost = 0.002f, slime_feed = 6.0f;
+	float slime_speed = 9.0f, slime_reach = 12.0f, slime_drain = 8.0f, slime_gain = 0.7f, slime_cut = 0.25f, slime_regrow = 8.0f;
+	int slime_eaten = 0, slime_cuts = 0;
+	std::vector<SlimeTube> tubes;
+	std::vector<SlimePoint> slime_pts;
+	std::vector<float> slime_d; // per cell: how far the nearest tube is
+	bool path_blocked(float ax, float ay, float bx, float by) const;
+	void step_slime(float dt);
 	float light_scale = 1.0f;
 	float spore_form = 8.0f, spore_germ = 8.0f;
 	bool sight_blocked(float ax, float ay, float bx, float by) const;
@@ -712,6 +787,28 @@ public:
 	PackedVector2Array get_walls() const;
 	void set_night(bool on) { night_now = on; }
 	void set_divide_min_temp(float t) { divide_min_temp = t; }
+	// Chapter 8. Mud: {o2_full (y, full oxygen above), o2_zero (none below),
+	// h2s_from (y, none above), h2s_full (y), h2s (max), relax, harm, safe}.
+	void set_mud(Dictionary params);
+	int add_stir(Vector2 pos, float radius, float seconds);
+	// Acid rain: how hard it rains (0 none .. 1), from the top `top` down.
+	void set_rain(float level, float top);
+	PackedFloat32Array get_rain_field() const;
+	PackedFloat32Array get_tox_field(int which) const;
+	// {tox_harm, tox_emit, tox_cost, tox_decay, res_gain, res_loss, symb_mult, symb_speed, symb_upkeep}
+	void set_ch8(Dictionary params);
+	// Of species s: how many carry a symbiont; mean resistance to toxin A / B.
+	int get_symb_count(int s) const;
+	PackedVector2Array get_symb_positions() const;
+	Vector2 get_res_mean(int s) const;
+	int get_swallowed() const { return swallowed; }
+	// Dead cells' shells laid out ready (8-1: a swamp full of the dead).
+	void add_shells(Vector2 pos, float radius, int n, float energy_each, int s);
+	// 8-5: {center, points: [Vector2], energy (0..1 of full), full, burn, len_cost,
+	// feed, speed, reach, drain, gain, cut, regrow}.
+	void set_slime(Dictionary params);
+	Dictionary get_slime() const;
+	void set_slime_owner(int k, int owner);
 	// {spots: [Vector2], energy, full, burn, reach, body, catch_rate, pull, drain, gain, speed, move_every}
 	void set_helio(Dictionary params);
 	Dictionary get_helio() const;

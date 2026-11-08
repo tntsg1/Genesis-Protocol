@@ -146,6 +146,11 @@ SimCore::SimCore() {
 	state.resize(n);
 	st_time.resize(n);
 	mem_x.assign(n, NAN);
+	symb.assign(n, 0);
+	slime_d.assign(n, 1e9f);
+	emitting_tox.assign(n, 0);
+	res_a.assign(n, 0.0f);
+	res_b.assign(n, 0.0f);
 	held.assign(n, 0);
 	mem_y.assign(n, NAN);
 	germ.assign(n, 0.0f);
@@ -217,6 +222,19 @@ void SimCore::setup(Vector2 world_size, int seed) {
 	enzyme.assign(gw * gh, 0.0f);
 	o2.assign(gw * gh, 0.0f);
 	o2_on = false;
+	mud_on = false;
+	mud_o2.assign(gw * gh, 0.0f);
+	mud_h2s.assign(gw * gh, 0.0f);
+	stirs.clear();
+	rain.assign(gw * gh, 0.0f);
+	rain_level = 0.0f;
+	tox_a.assign(gw * gh, 0.0f);
+	tox_b.assign(gw * gh, 0.0f);
+	swallowed = 0;
+	slime_on = slime_dead = false;
+	tubes.clear();
+	slime_pts.clear();
+	slime_eaten = slime_cuts = 0;
 	net.assign(gw * gh, 0.0f);
 	net_tmp.assign(gw * gh, 0.0f);
 	net_on = false;
@@ -310,6 +328,12 @@ int SimCore::add_species(Dictionary p) {
 	s.store = (float)(double)p.get("store", 0.0);
 	s.resp = (int)p.get("resp", 0);
 	s.slow_divide = (float)(double)p.get("slow_divide", 1.0);
+	s.decomp = (float)(double)p.get("decomp", 0.0);
+	s.phago = (bool)p.get("phago", false);
+	s.symbiont = (bool)p.get("symbiont", false);
+	s.eukaryote = (bool)p.get("eukaryote", false);
+	s.toxin = (bool)p.get("toxin", false);
+	s.acid_tol = clampf((float)(double)p.get("acid_tol", 0.0), 0.0f, 1.0f);
 	s.reseed = (bool)p.get("reseed", true);
 	s.rotifer = p.get("rotifer", false);
 	if (s.rotifer) {
@@ -545,6 +569,9 @@ void SimCore::rebuild_env() {
 			acid[c] = a;
 			rad[c] = r;
 			vent[c] = v;
+			if (mud_on) {
+				ch = std::max(ch, mud_h2s[c] * (1.0f - 0.85f * stir_at((i + 0.5f) * cell, (j + 0.5f) * cell)));
+			}
 			chem[c] = ch;
 			vent_total += v;
 			light[c] = in ? light_base[c] * m * light_scale : 0.0f;
@@ -1265,6 +1292,10 @@ int SimCore::spawn_one(int s, float wx, float wy, int parent) {
 	st_time[i] = 0.0f;
 	germ[i] = 0.0f;
 	held[i] = 0;
+	symb[i] = parent >= 0 ? symb[parent] : (S.eukaryote ? 1 : 0); // (the symbiont divides with it)
+	slime_d[i] = 1e9f;
+	res_a[i] = parent >= 0 ? clampf(res_a[parent] + gauss() * 0.02f, 0.0f, res_max) : 0.0f;
+	res_b[i] = parent >= 0 ? clampf(res_b[parent] + gauss() * 0.02f, 0.0f, res_max) : 0.0f;
 	mem_x[i] = parent >= 0 ? mem_x[parent] : NAN; // (the daughters remember too)
 	mem_y[i] = parent >= 0 ? mem_y[parent] : NAN;
 	threat_d[i] = 1e9f;
@@ -1534,6 +1565,13 @@ void SimCore::step_interventions(float dt) {
 	age(temp_spots);
 	age(jets);
 	age(irons);
+	size_t stirs_before = stirs.size();
+	age(stirs);
+	stir_rebuild -= dt;
+	if ((!stirs.empty() && stir_rebuild <= 0.0f) || stirs.size() != stirs_before) {
+		stir_rebuild = 0.5f;
+		rebuild_env();
+	}
 	// Warm / cold spots fade: refresh the water twice a second while any
 	// is on (and once more when the last one goes).
 	temp_rebuild -= dt;
@@ -1604,6 +1642,15 @@ Array SimCore::get_interventions() const {
 		d["delta"] = sp.delta;
 		d["fade"] = spot_fade(sp.life, sp.ttl);
 		d["left"] = sp.ttl - sp.life;
+		out.push_back(d);
+	}
+	for (const StirSpot &st : stirs) {
+		Dictionary d;
+		d["kind"] = "stir";
+		d["center"] = Vector2(st.x, st.y);
+		d["radius"] = st.r;
+		d["fade"] = spot_fade(st.life, st.ttl);
+		d["left"] = st.ttl - st.life;
 		out.push_back(d);
 	}
 	for (const IronSpot &ir : irons) {
@@ -1764,6 +1811,11 @@ void SimCore::move_agent(int w, int r) {
 	st_time[w] = st_time[r];
 	mem_x[w] = mem_x[r];
 	held[w] = held[r];
+	symb[w] = symb[r];
+	slime_d[w] = slime_d[r];
+	emitting_tox[w] = emitting_tox[r];
+	res_a[w] = res_a[r];
+	res_b[w] = res_b[r];
 	mem_y[w] = mem_y[r];
 	germ[w] = germ[r];
 	hurt[w] = hurt[r];
@@ -1886,6 +1938,8 @@ bool SimCore::cond_true(int i, uint8_t c, float t) const {
 		}
 		case C_NIGHT: return night_now;
 		case C_DAY: return !night_now;
+		case C_SYMB: return symb[i] != 0;
+		case C_RIVAL_NEAR: return std::min(scans[i].rival_d, slime_on && !slime_dead ? slime_d[i] : 1e9f) < t; // (the slime mould's tubes count)
 		case C_IMMUNE: return immune[i] != 0;
 		case C_O2_ABOVE: return o2_on && o2[nutrient_index(x[i], y[i])] > t;
 		case C_PREY_NEAR:
@@ -1988,6 +2042,9 @@ bool SimCore::act_possible(int i, uint8_t a) const {
 			return dx * dx + dy * dy > 25.0f * 25.0f;
 		}
 		case A_TO_SPORE: return state[i] != S_SPORE;
+		case A_SWALLOW: return S.phago && !symb[i] && scans[i].symb_t >= 0 && alive[scans[i].symb_t];
+		case A_TOXIN_A:
+		case A_TOXIN_B: return S.toxin;
 		case A_TO_FORAGE:
 		case A_TO_ALERT:
 		case A_TO_BREED:
@@ -2138,6 +2195,9 @@ void SimCore::scan_one(int i) {
 	float threat_d2 = vision_r * vision_r, prey_d2 = vision_r * vision_r;
 	float cand_rank[PREY_CAND];
 	out.ncand = 0;
+	out.symb_t = -1;
+	out.rival_d = 1e9f;
+	float symb_d2 = 0.0f;
 	float fx = 0, fy = 0, sx = 0, sy = 0;
 	int flock = 0;
 	for (int cj = r0; cj <= r1; cj++) {
@@ -2177,6 +2237,16 @@ void SimCore::scan_one(int i) {
 				// Chapter 7: nothing is seen through the ice.
 				if (!walls.empty() && sight_blocked(x[i], y[i], x[j], y[j])) {
 					continue;
+				}
+				if (sp[j] != sp[i] && !T.colony) {
+					float dd = std::sqrt(d2);
+					if (dd < out.rival_d) {
+						out.rival_d = dd;
+					}
+					if (S.phago && T.symbiont && d2 < vision_r * vision_r && (out.symb_t < 0 || d2 < symb_d2)) {
+						symb_d2 = d2;
+						out.symb_t = j;
+					}
 				}
 				if (sp[j] == sp[i]) {
 					// Peers in sight by the state they are in (level 12: “看见
@@ -2285,7 +2355,7 @@ void SimCore::scan_one(int i) {
 			}
 		}
 	}
-	if (S.diet == DIET_GRAZER) {
+	if (S.diet == DIET_GRAZER && S.decomp <= 0.0f) {
 		// Best clump in sight: bigger and closer is better.
 		float best = 0.0f;
 		for (int cj = r0; cj <= r1; cj++) {
@@ -2307,7 +2377,7 @@ void SimCore::scan_one(int i) {
 				}
 			}
 		}
-	} else if (S.diet == DIET_PREDATOR) {
+	} else if (S.diet == DIET_PREDATOR || S.decomp > 0.0f) {
 		float best_d2 = vision_r * vision_r;
 		for (int cj = r0; cj <= r1; cj++) {
 			for (int ci = c0; ci <= c1; ci++) {
@@ -2345,6 +2415,8 @@ void SimCore::step(float dt) {
 	step_oxygen(dt);
 	step_net(dt);
 	step_helio(dt);
+	step_ch8(dt);
+	step_slime(dt);
 	auto t1 = clk::now();
 	step_algae(dt);
 	step_shells(dt);
@@ -2449,7 +2521,7 @@ void SimCore::step(float dt) {
 		const float vision_r = 30.0f + 24.0f * t_vision[i] + (multicell ? r * 2.0f : 0.0f);
 		// Alert swims 25% faster (its top speed, so a flat-out flight gains too).
 		const float max_speed = S.colony ? S.col_speed * (1.0f - cslow[i]) : (18.0f + 14.0f * t_speed[i]) * (1.0f - 0.04f * t_armor[i]) * (multicell ? 0.7f : 1.0f) * S.speed_mult
-				* S.motor_speed * (state[i] == S_ALERT ? 1.25f : 1.0f)
+				* S.motor_speed * (symb[i] ? symb_speed : 1.0f) * (state[i] == S_ALERT ? 1.25f : 1.0f)
 				* (net_on ? 1.0f - net_slow * net_at(x[i], y[i]) : 1.0f); // (chapter 6 boss: held in the net)
 		// Division needs the split energy plus a new body for the child; an
 		// organism keeps feeding until it has both.
@@ -2465,7 +2537,7 @@ void SimCore::step(float dt) {
 		int flock = sc.flock;
 
 		// What it senses, kept for the deck and for explanations.
-		int food = S.diet == DIET_GRAZER && sc.food >= 0 && al_e[sc.food] > 0.0f ? sc.food : -1;
+		int food = S.diet == DIET_GRAZER && S.decomp <= 0.0f && sc.food >= 0 && al_e[sc.food] > 0.0f ? sc.food : -1;
 		int lure = sc.lure >= 0 && sc.lure < (int)giants.size() ? sc.lure : -1;
 		// (Chapter 6: a grazer that has just eaten one up digests it first, as
 		// a real protist does: the brake on eating the producers bare.)
@@ -2483,9 +2555,11 @@ void SimCore::step(float dt) {
 			cgy = light[nutrient_index(x[i], y[i] + 24.0f)] - light[nutrient_index(x[i], y[i] - 24.0f)];
 			chem_near = cgx * cgx + cgy * cgy > 1e-8f;
 		}
-		int carcass = S.diet == DIET_PREDATOR && sc.carcass >= 0 && sh_e[sc.carcass] > 0.0f ? sc.carcass : -1;
+		int carcass = (S.diet == DIET_PREDATOR || S.decomp > 0.0f) && sc.carcass >= 0 && sc.carcass < shells && sh_e[sc.carcass] > 0.0f ? sc.carcass : -1;
+		// (A decomposer's food is the shells: "see food" is a shell for it.)
+		const bool decomp_food = S.decomp > 0.0f && carcass >= 0;
 		hurt[i] = std::max(0.0f, hurt[i] - dt);
-		sense[i] = (uint8_t)((food >= 0 || cfood >= 0 || chem_near || lure >= 0 ? S_ALGAE : 0) | (prey >= 0 ? S_PREY : 0) | (carcass >= 0 ? S_SHELL : 0) |
+		sense[i] = (uint8_t)((food >= 0 || cfood >= 0 || chem_near || lure >= 0 || decomp_food ? S_ALGAE : 0) | (prey >= 0 ? S_PREY : 0) | (carcass >= 0 ? S_SHELL : 0) |
 				(threat >= 0 ? S_THREAT : 0) | (hurt[i] > 0.0f ? S_ATTACKED : 0));
 		threat_d[i] = threat >= 0 ? sc.threat_d : 1e9f;
 		// Chapter 6 boss: the pseudopod net is felt as a danger close by (a
@@ -2527,6 +2601,7 @@ void SimCore::step(float dt) {
 		// Run the deck: the first card whose conditions hold and whose action
 		// can be done right now wins.
 		int chosen = -1;
+		emitting_tox[i] = 0;
 		uint8_t todo = A_WANDER;
 		bool has_divide = false;
 		int smell_which = -1; // a "signal + flee" card: which smell it runs from
@@ -2568,6 +2643,19 @@ void SimCore::step(float dt) {
 				if (chosen < 0 && card_holds(i, cd)) {
 					mem_x[i] = x[i];
 					mem_y[i] = y[i];
+				}
+				continue;
+			}
+			// Chapter 8: a toxin gland secretes as the cell goes about its
+			// business (it costs energy, not the tick).
+			if (cd.act == A_TOXIN_A || cd.act == A_TOXIN_B) {
+				if (chosen < 0 && S.toxin && card_holds(i, cd)) {
+					int c = nutrient_index(x[i], y[i]);
+					(cd.act == A_TOXIN_A ? tox_a : tox_b)[c] += tox_emit * dt;
+					float pay = std::min(std::max(0.0f, energy[i]), tox_cost * dt);
+					energy[i] -= pay;
+					energy_out += pay;
+					emitting_tox[i] = 1;
 				}
 				continue;
 			}
@@ -2656,6 +2744,18 @@ void SimCore::step(float dt) {
 					tgy[i] = y[i] + diry * 50.0f;
 					break;
 				}
+				if (decomp_food) {
+					float dx = sh_x[carcass] - x[i], dy = sh_y[carcass] - y[i];
+					float d = std::max(1e-3f, std::sqrt(dx * dx + dy * dy));
+					dirx = dx / d;
+					diry = dy / d;
+					want = clampf((d - r - sh_r[carcass]) / 45.0f + 0.1f, 0.1f, 0.7f);
+					act = ACT_SCAVENGE;
+					wander[i] = std::atan2(dy, dx);
+					tgx[i] = sh_x[carcass];
+					tgy[i] = sh_y[carcass];
+					break;
+				}
 				if (lure >= 0) {
 					float lx = giants[lure].x - x[i], ly = giants[lure].y - y[i];
 					float ld = std::max(1e-3f, std::sqrt(lx * lx + ly * ly));
@@ -2697,6 +2797,38 @@ void SimCore::step(float dt) {
 				wander[i] = std::atan2(dy, dx);
 				tgx[i] = al_x[food];
 				tgy[i] = al_y[food];
+			} break;
+			case A_SWALLOW: {
+				int j = sc.symb_t;
+				float dx = x[j] - x[i], dy = y[j] - y[i];
+				float d = std::max(1e-3f, std::sqrt(dx * dx + dy * dy));
+				dirx = dx / d;
+				diry = dy / d;
+				want = clampf((d - r) / 40.0f + 0.2f, 0.2f, 0.9f);
+				act = ACT_SEEK_FOOD;
+				wander[i] = std::atan2(dy, dx);
+				target[i] = id[j];
+				tgx[i] = x[j];
+				tgy[i] = y[j];
+				if (d < S.extent + species[sp[j]].extent + 3.0f && !symb[i]) {
+					// In, and not digested: it lives on inside (a mitochondrion's start).
+					symb[i] = 1;
+					swallowed++;
+					energy_out += std::max(0.0f, energy[j]) + body_energy(sp[j]);
+					energy[j] = 0.0f;
+					emit(EV_GRAZE, x[j], y[j], sp[i], x[i], y[i]);
+					kill(j, CAUSE_EATEN);
+				}
+			} break;
+			case A_TOXIN_A:
+			case A_TOXIN_B: {
+				int c = nutrient_index(x[i], y[i]);
+				(todo == A_TOXIN_A ? tox_a : tox_b)[c] += tox_emit * dt;
+				float pay = std::min(std::max(0.0f, energy[i]), tox_cost * dt);
+				energy[i] -= pay;
+				energy_out += pay;
+				want = 0.3f;
+				act = ACT_SIGNAL;
 			} break;
 			case A_SCAVENGE: {
 				float dx = sh_x[carcass] - x[i], dy = sh_y[carcass] - y[i];
@@ -3180,6 +3312,12 @@ void SimCore::step(float dt) {
 				sh_e[carcass] -= take;
 				// Teeth or gut: the weaker the attack, the more a shell yields.
 				float eff = EAT_SHELL_EFF + 0.3f * clampf((3.2f - t_attack[i]) / 1.6f, 0.0f, 1.0f);
+				if (S.decomp > 0.0f) {
+					// 分解酶: digested outside the cell, a share left in the water.
+					nutrient[nutrient_index(sh_x[carcass], sh_y[carcass])] += take * S.decomp;
+					take *= 1.0f - S.decomp;
+					eff = EAT_ALGAE_EFF;
+				}
 				energy[i] += take * eff * rmul;
 				energy_in += take * eff * (rmul - 1.0f);
 				energy_out += take * (1.0f - eff);
@@ -3260,18 +3398,41 @@ void SimCore::step(float dt) {
 		int ec = nutrient_index(x[i], y[i]);
 		float dev = std::max(0.0f, std::abs(temp[ec] - t_topt[i]) - band_for(t_ttol[i]));
 		float st = (TEMP_COST * dev + (dev > TEMP_SEVERE ? TEMP_HURT * (dev - TEMP_SEVERE) : 0.0f)) * S.size_factor;
-		float sa = acid[ec] * ACID_COST * S.size_factor / (1.0f + 0.35f * t_armor[i]);
+		float sa = (acid[ec] + rain[ec]) * ACID_COST * S.size_factor / (1.0f + 0.35f * t_armor[i]) * (1.0f - 0.85f * S.acid_tol);
+		upkeep += 0.35f * S.acid_tol;
+		// Chapter 8: hydrogen sulfide in the mud poisons a cell that breathes
+		// oxygen (half as much a facultative one); toxins whoever is not
+		// immune, less as it grows resistant.
+		float s8 = 0.0f;
+		if (mud_on && S.diet != DIET_CHEMO && (S.resp == 2 || S.resp == 3 || symb[i])) {
+			s8 += std::max(0.0f, chem[ec] - h2s_safe) * h2s_harm * S.size_factor * (S.resp == 3 && !symb[i] ? 0.5f : 1.0f);
+		}
+		if (!S.toxin && (tox_a[ec] > 0.0f || tox_b[ec] > 0.0f)) {
+			s8 += (tox_a[ec] * (1.0f - res_a[i]) + tox_b[ec] * (1.0f - res_b[i])) * tox_harm * S.size_factor;
+			// Living through it: resistance grows (and is inherited).
+			res_a[i] = std::min(res_max, res_a[i] + res_gain * tox_a[ec] * dt);
+			res_b[i] = std::min(res_max, res_b[i] + res_gain * tox_b[ec] * dt);
+		}
+		if (tox_a[ec] < 0.02f) {
+			res_a[i] = std::max(0.0f, res_a[i] - res_loss * dt);
+		}
+		if (tox_b[ec] < 0.02f) {
+			res_b[i] = std::max(0.0f, res_b[i] - res_loss * dt);
+		}
+		// Resistance is not free: a little upkeep for it.
+		upkeep += 0.15f * (res_a[i] + res_b[i]);
 		// Chapter 6: oxygen above the threshold poisons an anaerobe, the more
 		// the thicker it is (a facultative one only if the level says so).
 		float so = 0.0f;
-		if (o2_on && S.diet != DIET_PHOTO && (S.resp == 1 || (S.resp == 3 && fac_harm > 0.0f))) {
+		if (o2_on && S.diet != DIET_PHOTO && !symb[i] && (S.resp == 1 || (S.resp == 3 && fac_harm > 0.0f))) { // (a symbiont uses the oxygen up: no harm)
 			so = std::max(0.0f, o2[ec] - o2_tox) * o2_harm * S.size_factor * (S.resp == 3 ? fac_harm : 1.0f);
 		}
 		// Chapter 6 boss: in the net it is being digested.
 		float sn = net_on ? net_drain * net_at(x[i], y[i]) * S.size_factor : 0.0f;
 		stress_t[i] = st;
+		so += s8;
 		stress_a[i] = sa + so;
-		float own = std::max(0.0f, base + move + upkeep);
+		float own = std::max(0.0f, base + move + upkeep) * (symb[i] ? symb_upkeep : 1.0f);
 		if (spore_closed(i)) {
 			own = st = sa = so = sn = 0.0f; // (sealed: cold, poison, the net cannot reach it)
 			stress_t[i] = stress_a[i] = 0.0f;
@@ -5942,6 +6103,21 @@ void SimCore::step_oxygen(float dt) {
 		float k = o2_decay + o2_sulfide * chem[c];
 		o2[c] = clampf(o2[c] * std::exp(-k * d2), 0.0f, 1.5f);
 	}
+	// Chapter 8: the mud pulls the oxygen back to its layers; stirring
+	// carries it down where it was done.
+	if (mud_on) {
+		const float k = 1.0f - std::exp(-mud_relax * d2);
+		for (int j = 0; j < gh; j++) {
+			for (int i = 0; i < gw; i++) {
+				int c = j * gw + i;
+				float want = mud_o2[c];
+				if (!stirs.empty()) {
+					want = std::max(want, stir_o2 * stir_at((i + 0.5f) * cell, (j + 0.5f) * cell));
+				}
+				o2[c] += (want - o2[c]) * k;
+			}
+		}
+	}
 	// Iron dust soaks it up where it was scattered (banded iron formations).
 	for (const IronSpot &ir : irons) {
 		float f = spot_fade(ir.life, ir.ttl);
@@ -5963,11 +6139,14 @@ void SimCore::step_oxygen(float dt) {
 // enough (need), little without; a facultative one a little less either way.
 float SimCore::resp_gain(int i) const {
 	const Species &S = species[sp[i]];
-	if (!o2_on || S.resp <= 1) {
+	if (!o2_on) {
 		return 1.0f;
 	}
 	float u = clampf(o2[nutrient_index(x[i], y[i])] / std::max(1e-4f, o2_need), 0.0f, 1.0f);
-	return S.resp == 2 ? lerpf(aero_low, aero_mult, u) : lerpf(fac_low, fac_mult, u);
+	float g = S.resp <= 1 ? 1.0f : (S.resp == 2 ? lerpf(aero_low, aero_mult, u) : lerpf(fac_low, fac_mult, u));
+	// Chapter 8: a symbiont that breathes oxygen for its host: far more
+	// from a meal where there is oxygen, on top of its own breathing.
+	return symb[i] ? g * lerpf(0.85f, symb_mult, u) : g;
 }
 
 // Toward the most (up) or least oxygen within reach; none when it is already
@@ -6344,6 +6523,448 @@ Dictionary SimCore::get_helio() const {
 	return d;
 }
 
+
+// --- chapter 8: mud, stirring, acid rain, toxins, endosymbionts ----------------
+
+static float smooth01(float t) {
+	t = t < 0.0f ? 0.0f : (t > 1.0f ? 1.0f : t);
+	return t * t * (3.0f - 2.0f * t);
+}
+
+void SimCore::set_mud(Dictionary p) {
+	mud_on = (bool)p.get("on", true);
+	float o2_full = p.get("o2_full", 500.0f), o2_zero = p.get("o2_zero", 1100.0f);
+	float h_from = p.get("h2s_from", 900.0f), h_full = p.get("h2s_full", 1600.0f), h_max = p.get("h2s", 1.0f);
+	mud_relax = p.get("relax", mud_relax);
+	h2s_harm = p.get("harm", h2s_harm);
+	h2s_safe = p.get("safe", h2s_safe);
+	stir_o2 = p.get("stir_o2", stir_o2);
+	for (int j = 0; j < gh; j++) {
+		float wy = (j + 0.5f) * cell;
+		float o = 1.0f - smooth01((wy - o2_full) / std::max(1.0f, o2_zero - o2_full));
+		float hs = h_max * smooth01((wy - h_from) / std::max(1.0f, h_full - h_from));
+		for (int i = 0; i < gw; i++) {
+			int c = j * gw + i;
+			bool in = inside_dish((i + 0.5f) * cell, wy, 0.0f);
+			mud_o2[c] = in ? o : 0.0f;
+			mud_h2s[c] = in ? hs : 0.0f;
+			if (mud_on) {
+				o2[c] = mud_o2[c];
+			}
+		}
+	}
+	if (mud_on) {
+		o2_on = true;
+	}
+	rebuild_env();
+}
+
+float SimCore::stir_at(float wx, float wy) const {
+	float u = 0.0f;
+	for (const StirSpot &st : stirs) {
+		float dx = wx - st.x, dy = wy - st.y;
+		float v = smooth01((st.r - std::sqrt(dx * dx + dy * dy)) / (st.r * 0.4f)) * spot_fade(st.life, st.ttl);
+		u = std::max(u, v);
+	}
+	return u;
+}
+
+int SimCore::add_stir(Vector2 pos, float radius, float seconds) {
+	stirs.push_back({ pos.x, pos.y, radius, 0.0f, seconds });
+	stir_rebuild = 0.0f;
+	rebuild_env();
+	return (int)stirs.size() - 1;
+}
+
+void SimCore::set_rain(float level, float top) {
+	rain_level = std::max(0.0f, level);
+	rain_top = top;
+}
+
+void SimCore::set_ch8(Dictionary p) {
+	tox_harm = p.get("tox_harm", tox_harm);
+	tox_emit = p.get("tox_emit", tox_emit);
+	tox_cost = p.get("tox_cost", tox_cost);
+	tox_decay = p.get("tox_decay", tox_decay);
+	tox_diffuse = p.get("tox_diffuse", tox_diffuse);
+	res_gain = p.get("res_gain", res_gain);
+	res_loss = p.get("res_loss", res_loss);
+	res_max = p.get("res_max", res_max);
+	symb_mult = p.get("symb_mult", symb_mult);
+	symb_speed = p.get("symb_speed", symb_speed);
+	symb_upkeep = p.get("symb_upkeep", symb_upkeep);
+	rain_depth = p.get("rain_depth", rain_depth);
+	rain_rate = p.get("rain_rate", rain_rate);
+}
+
+void SimCore::step_ch8(float dt) {
+	if (gw == 0) {
+		return;
+	}
+	// Toxins spread and break down.
+	bool any_tox = false;
+	for (int c = 0; c < gw * gh && !any_tox; c++) {
+		any_tox = tox_a[c] > 1e-4f || tox_b[c] > 1e-4f;
+	}
+	if (any_tox) {
+		transport(tox_a, tox_diffuse, dt);
+		transport(tox_b, tox_diffuse, dt);
+		float keep = std::exp(-tox_decay * dt);
+		for (int c = 0; c < gw * gh; c++) {
+			tox_a[c] *= keep;
+			tox_b[c] *= keep;
+		}
+	}
+	// Acid rain soaks down: the deeper, the slower; once it stops, it drains.
+	if (rain_level > 0.0f || std::any_of(rain.begin(), rain.end(), [](float v) { return v > 1e-4f; })) {
+		for (int j = 0; j < gh; j++) {
+			float wy = (j + 0.5f) * cell;
+			float depth = std::max(0.0f, wy - rain_top);
+			float k = rain_rate * std::exp(-depth / std::max(1.0f, rain_depth));
+			for (int i = 0; i < gw; i++) {
+				int c = j * gw + i;
+				float want = rain_level;
+				float rate = want < rain[c] ? k * 2.5f : k;
+				rain[c] += (want - rain[c]) * (1.0f - std::exp(-rate * dt));
+			}
+		}
+	}
+}
+
+PackedFloat32Array SimCore::get_rain_field() const {
+	PackedFloat32Array out;
+	out.resize(gw * gh);
+	float *w = out.ptrw();
+	for (int c = 0; c < gw * gh; c++) {
+		w[c] = rain[c];
+	}
+	return out;
+}
+
+PackedFloat32Array SimCore::get_tox_field(int which) const {
+	PackedFloat32Array out;
+	out.resize(gw * gh);
+	float *w = out.ptrw();
+	const std::vector<float> &f = which == 1 ? tox_b : tox_a;
+	for (int c = 0; c < gw * gh; c++) {
+		w[c] = f[c];
+	}
+	return out;
+}
+
+PackedVector2Array SimCore::get_symb_positions() const {
+	PackedVector2Array out;
+	for (int i = 0; i < count; i++) {
+		if (alive[i] && symb[i]) {
+			out.push_back(Vector2(x[i], y[i]));
+		}
+	}
+	return out;
+}
+
+int SimCore::get_symb_count(int s) const {
+	int n = 0;
+	for (int i = 0; i < count; i++) {
+		n += alive[i] && sp[i] == s && symb[i] ? 1 : 0;
+	}
+	return n;
+}
+
+Vector2 SimCore::get_res_mean(int s) const {
+	double a = 0.0, b = 0.0;
+	int n = 0;
+	for (int i = 0; i < count; i++) {
+		if (alive[i] && sp[i] == s) {
+			a += res_a[i];
+			b += res_b[i];
+			n++;
+		}
+	}
+	return n ? Vector2((float)(a / n), (float)(b / n)) : Vector2();
+}
+
+
+void SimCore::add_shells(Vector2 pos, float radius, int n, float energy_each, int s) {
+	for (int k = 0; k < n && shells < MAX_SHELLS; k++) {
+		float a = rand_range(0.0f, TAU), d = radius * std::sqrt(randf());
+		float wx = pos.x + std::cos(a) * d, wy = pos.y + std::sin(a) * d;
+		if (!inside_dish(wx, wy, 10.0f)) {
+			continue;
+		}
+		int h = shells++;
+		sh_x[h] = wx;
+		sh_y[h] = wy;
+		sh_e[h] = sh_e0[h] = energy_each;
+		sh_h[h] = rand_range(0.0f, TAU);
+		sh_r[h] = s >= 0 && s < (int)species.size() ? species[s].radius : 5.5f;
+		sh_ph[h] = rand_range(0.0f, 100.0f);
+		sh_sp[h] = std::max(0, s);
+		sh_lineage[h] = 0;
+	}
+}
+
+// --- chapter 8 boss: the slime mould -----------------------------------------------
+
+void SimCore::set_slime(Dictionary p) {
+	tubes.clear();
+	slime_pts.clear();
+	Array pts = p.get("points", Array());
+	for (int k = 0; k < pts.size(); k++) {
+		Vector2 v = pts[k];
+		SlimePoint sp0;
+		sp0.x = v.x;
+		sp0.y = v.y;
+		slime_pts.push_back(sp0);
+	}
+	Vector2 c = p.get("center", Vector2(slime_x, slime_y));
+	slime_x = c.x;
+	slime_y = c.y;
+	slime_full = p.get("full", slime_full);
+	slime_e = (float)p.get("energy", 0.6f) * slime_full;
+	slime_burn = p.get("burn", slime_burn);
+	slime_len_cost = p.get("len_cost", slime_len_cost);
+	slime_feed = p.get("feed", slime_feed);
+	slime_speed = p.get("speed", slime_speed);
+	slime_reach = p.get("reach", slime_reach);
+	slime_drain = p.get("drain", slime_drain);
+	slime_gain = p.get("gain", slime_gain);
+	slime_cut = p.get("cut", slime_cut);
+	slime_regrow = p.get("regrow", slime_regrow);
+	slime_core = p.get("core", slime_core);
+	slime_on = !slime_pts.empty();
+	slime_dead = false;
+	slime_eaten = slime_cuts = 0;
+	// One tube toward each point, straight at it to begin with.
+	for (int k = 0; k < (int)slime_pts.size(); k++) {
+		SlimeTube t;
+		float a = std::atan2(slime_pts[k].y - slime_y, slime_pts[k].x - slime_x);
+		t.pts.push_back(Vector2(slime_x + std::cos(a) * slime_core, slime_y + std::sin(a) * slime_core));
+		t.dmg.push_back(0.0f);
+		t.target = k;
+		t.ang = a;
+		t.wait = 2.0f + 1.5f * k;
+		tubes.push_back(t);
+	}
+}
+
+void SimCore::set_slime_owner(int k, int owner) {
+	if (k >= 0 && k < (int)slime_pts.size()) {
+		slime_pts[k].owner = owner;
+	}
+}
+
+bool SimCore::path_blocked(float ax, float ay, float bx, float by) const {
+	const float rx = bx - ax, ry = by - ay;
+	auto hits = [&](const Barrier &w) {
+		const float sx = w.bx - w.ax, sy = w.by - w.ay;
+		const float den = rx * sy - ry * sx;
+		if (std::abs(den) < 1e-6f) {
+			return false;
+		}
+		const float qx = w.ax - ax, qy = w.ay - ay;
+		const float t = (qx * sy - qy * sx) / den;
+		const float u = (qx * ry - qy * rx) / den;
+		return t > 0.0f && t < 1.0f && u >= 0.0f && u <= 1.0f;
+	};
+	for (const Barrier &w : walls) {
+		if (hits(w)) {
+			return true;
+		}
+	}
+	for (const Barrier &w : barriers) {
+		if (hits(w)) {
+			return true;
+		}
+	}
+	return !inside_dish(bx, by, 8.0f);
+}
+
+void SimCore::step_slime(float dt) {
+	if (!slime_on || slime_dead) {
+		return;
+	}
+	// Upkeep: the body, and every µm of tube.
+	float len = 0.0f;
+	for (const SlimeTube &t : tubes) {
+		for (size_t k = 1; k < t.pts.size(); k++) {
+			len += (t.pts[k] - t.pts[k - 1]).length();
+		}
+	}
+	float burn = (slime_burn + slime_len_cost * len) * dt;
+	slime_e -= burn;
+	energy_out += burn;
+	for (SlimePoint &p : slime_pts) {
+		p.linked = false;
+	}
+	const float step_len = 10.0f;
+	for (SlimeTube &t : tubes) {
+		SlimePoint &goal = slime_pts[t.target];
+		Vector2 tip = t.pts.back();
+		float gx = goal.x - tip.x, gy = goal.y - tip.y;
+		float gd = std::sqrt(gx * gx + gy * gy);
+		if (gd < 20.0f) {
+			t.done = true;
+		}
+		if (t.done) {
+			goal.linked = true;
+			// Feeding off the point (nothing if the player holds it).
+			if (goal.owner == 0) {
+				slime_e += slime_feed * dt;
+				energy_in += slime_feed * dt;
+			}
+			continue;
+		}
+		if (t.wait > 0.0f) {
+			t.wait -= dt;
+			continue;
+		}
+		// Grow: steer at the goal; where a membrane or ice is in the way, try
+		// bending off either side (the nearer way round first).
+		float want = std::atan2(gy, gx);
+		float da = std::remainder(want - t.ang, TAU);
+		t.ang += clampf(da, -1.2f * dt, 1.2f * dt);
+		float need = slime_speed * dt;
+		while (need > 0.0f) {
+			float stp = std::min(need, step_len);
+			Vector2 last = t.pts.back();
+			bool ok = false;
+			for (float off : { 0.0f, 0.5f, -0.5f, 1.0f, -1.0f, 1.5f, -1.5f, 2.0f, -2.0f }) {
+				float a = t.ang + off;
+				float nx = last.x + std::cos(a) * stp, ny = last.y + std::sin(a) * stp;
+				if (!path_blocked(last.x, last.y, nx, ny)) {
+					if (off != 0.0f) {
+						t.ang = a;
+					}
+					Vector2 prev = t.pts.size() > 1 ? t.pts[t.pts.size() - 2] : Vector2(slime_x, slime_y);
+					if ((last - prev).length() < step_len && t.pts.size() > 1) {
+						t.pts.back() = Vector2(nx, ny);
+					} else {
+						t.pts.push_back(Vector2(nx, ny));
+						t.dmg.push_back(0.0f);
+					}
+					ok = true;
+					break;
+				}
+			}
+			if (!ok) {
+				break;
+			}
+			need -= stp;
+		}
+	}
+	// Toxin burns a tube: where it is thick enough, the tube there dies, and
+	// all beyond it with it; it grows again from the cut after a while.
+	for (SlimeTube &t : tubes) {
+		for (size_t k = 0; k < t.pts.size(); k++) {
+			int c = nutrient_index(t.pts[k].x, t.pts[k].y);
+			float tx = tox_a[c] + tox_b[c];
+			if (tx > slime_cut) {
+				t.dmg[k] += (tx - slime_cut) * 2.0f * dt;
+			} else {
+				t.dmg[k] = std::max(0.0f, t.dmg[k] - 0.05f * dt);
+			}
+			if (t.dmg[k] >= 1.0f) {
+				size_t keep = std::max<size_t>(1, k);
+				t.pts.resize(keep);
+				t.dmg.resize(keep);
+				t.dmg.back() = 0.0f;
+				t.done = false;
+				t.wait = slime_regrow;
+				slime_cuts++;
+				break;
+			}
+		}
+	}
+	// What the tubes lie across is engulfed: drained, then taken in.
+	for (int i = 0; i < count; i++) {
+		if (!alive[i] || spore_closed(i) || species[sp[i]].colony) {
+			continue;
+		}
+		// The nearest tube (or the body), kept for "别的物种在".
+		float best = std::max(0.0f, std::hypot(x[i] - slime_x, y[i] - slime_y) - slime_core);
+		for (const SlimeTube &t : tubes) {
+			for (size_t k = 1; k < t.pts.size(); k++) {
+				Vector2 a = t.pts[k - 1], b = t.pts[k];
+				if (std::abs(a.x - x[i]) > best + 20.0f && std::abs(b.x - x[i]) > best + 20.0f && (a.x - x[i]) * (b.x - x[i]) > 0.0f) {
+					continue;
+				}
+				Vector2 ab = b - a;
+				float l2 = ab.length_squared();
+				float u = l2 > 1e-4f ? clampf(((x[i] - a.x) * ab.x + (y[i] - a.y) * ab.y) / l2, 0.0f, 1.0f) : 0.0f;
+				float qx = a.x + ab.x * u - x[i], qy = a.y + ab.y * u - y[i];
+				best = std::min(best, std::sqrt(qx * qx + qy * qy) - slime_reach);
+			}
+		}
+		slime_d[i] = std::max(0.0f, best);
+		bool on = best < species[sp[i]].extent;
+		if (!on) {
+			continue;
+		}
+		float take = std::min(std::max(0.0f, energy[i]), slime_drain * dt);
+		energy[i] -= take;
+		slime_e += take * slime_gain;
+		energy_out += take * (1.0f - slime_gain);
+		hurt[i] = 2.0f;
+		vx[i] *= 0.5f;
+		vy[i] *= 0.5f;
+		if (energy[i] <= 0.5f) {
+			float rest = std::max(0.0f, energy[i]) + body_energy(sp[i]);
+			slime_e += rest * slime_gain;
+			energy_out += rest * (1.0f - slime_gain);
+			energy[i] = 0.0f;
+			slime_eaten++;
+			kill(i, CAUSE_EATEN);
+		}
+	}
+	slime_e = std::min(slime_e, slime_full * 1.5f);
+	if (slime_e <= 0.0f) {
+		slime_e = 0.0f;
+		slime_dead = true;
+	}
+}
+
+Dictionary SimCore::get_slime() const {
+	Dictionary d;
+	d["on"] = slime_on;
+	d["dead"] = slime_dead;
+	d["center"] = Vector2(slime_x, slime_y);
+	d["core"] = slime_core;
+	d["reach"] = slime_reach;
+	d["energy_frac"] = slime_full > 0.0f ? slime_e / slime_full : 0.0f;
+	d["eaten"] = slime_eaten;
+	d["cuts"] = slime_cuts;
+	Array ts;
+	for (const SlimeTube &t : tubes) {
+		PackedVector2Array pv;
+		pv.push_back(Vector2(slime_x, slime_y));
+		for (const Vector2 &v : t.pts) {
+			pv.push_back(v);
+		}
+		Dictionary td;
+		td["pts"] = pv;
+		td["done"] = t.done;
+		td["target"] = t.target;
+		td["wait"] = t.wait;
+		ts.push_back(td);
+	}
+	d["tubes"] = ts;
+	Array ps;
+	int linked = 0, owned = 0;
+	for (const SlimePoint &p : slime_pts) {
+		Dictionary pd;
+		pd["pos"] = Vector2(p.x, p.y);
+		pd["owner"] = p.owner;
+		pd["linked"] = p.linked;
+		ps.push_back(pd);
+		linked += p.linked ? 1 : 0;
+		owned += p.owner == 1 ? 1 : 0;
+	}
+	d["points"] = ps;
+	d["linked"] = linked;
+	d["owned"] = owned;
+	return d;
+}
+
 Dictionary SimCore::get_stats() const {
 	Dictionary d;
 	Array per;
@@ -6481,6 +7102,10 @@ Dictionary SimCore::get_agent(int agent_id) const {
 		d["signal_b"] = sig_b[ec];
 		d["stress_temp"] = stress_t[i];
 		d["stress_acid"] = stress_a[i];
+		d["symb"] = symb[i] != 0;
+		d["toxin_out"] = emitting_tox[i] != 0;
+		d["res_a"] = res_a[i];
+		d["res_b"] = res_b[i];
 		d["slots"] = slots_for(t_neural[i]);
 		d["fired"] = (int)fired[i];
 		d["state"] = (int)state[i];
@@ -6536,6 +7161,20 @@ void SimCore::_bind_methods() {
 	ClassDB::bind_method(D_METHOD("set_light_scale", "scale"), &SimCore::set_light_scale);
 	ClassDB::bind_method(D_METHOD("set_spore_times", "form", "germinate"), &SimCore::set_spore_times);
 	ClassDB::bind_method(D_METHOD("add_brine", "pos", "radius", "delta", "seconds"), &SimCore::add_brine);
+	ClassDB::bind_method(D_METHOD("set_mud", "params"), &SimCore::set_mud);
+	ClassDB::bind_method(D_METHOD("add_stir", "pos", "radius", "seconds"), &SimCore::add_stir);
+	ClassDB::bind_method(D_METHOD("set_rain", "level", "top"), &SimCore::set_rain);
+	ClassDB::bind_method(D_METHOD("get_rain_field"), &SimCore::get_rain_field);
+	ClassDB::bind_method(D_METHOD("get_tox_field", "which"), &SimCore::get_tox_field);
+	ClassDB::bind_method(D_METHOD("set_ch8", "params"), &SimCore::set_ch8);
+	ClassDB::bind_method(D_METHOD("get_symb_count", "s"), &SimCore::get_symb_count);
+	ClassDB::bind_method(D_METHOD("get_symb_positions"), &SimCore::get_symb_positions);
+	ClassDB::bind_method(D_METHOD("get_res_mean", "s"), &SimCore::get_res_mean);
+	ClassDB::bind_method(D_METHOD("get_swallowed"), &SimCore::get_swallowed);
+	ClassDB::bind_method(D_METHOD("add_shells", "pos", "radius", "n", "energy_each", "s"), &SimCore::add_shells);
+	ClassDB::bind_method(D_METHOD("set_slime", "params"), &SimCore::set_slime);
+	ClassDB::bind_method(D_METHOD("get_slime"), &SimCore::get_slime);
+	ClassDB::bind_method(D_METHOD("set_slime_owner", "k", "owner"), &SimCore::set_slime_owner);
 	ClassDB::bind_method(D_METHOD("get_net_field"), &SimCore::get_net_field);
 	ClassDB::bind_method(D_METHOD("get_net_stats"), &SimCore::get_net_stats);
 	ClassDB::bind_method(D_METHOD("add_iron", "pos", "radius", "seconds"), &SimCore::add_iron);

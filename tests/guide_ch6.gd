@@ -9,6 +9,7 @@ var fails := 0
 
 
 func _initialize() -> void:
+	Levels.force_guides = true
 	CampaignSave.reset_for_tests()
 	root.add_child(preload("res://tests/test_window.gd").new())
 	scene = load("res://scenes/showcase.tscn").instantiate()

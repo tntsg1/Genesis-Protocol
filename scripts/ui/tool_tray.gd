@@ -10,7 +10,7 @@ extends GlassPanel
 # Hover gives the full explanation. Clicking a card picks the tool.
 
 const IV := preload("res://scripts/interventions.gd")
-const KINDS := ["nutrient", "membrane", "heat", "current", "phage", "irritant", "iron", "brine"]
+const KINDS := ["nutrient", "membrane", "heat", "current", "phage", "irritant", "iron", "brine", "stir"]
 const DESC := {
 	nutrient = "点击培养皿中的位置，投放一团营养物质，吸引附近的细胞。",
 	membrane = "按住拖出一道膜，45 秒内谁也过不去",
@@ -20,6 +20,7 @@ const DESC := {
 	irritant = "点它的头部：缩回头冠，嘴里的吐出来",
 	iron = "点一下撒铁粉，吸掉那片水里的氧气",
 	brine = "点一下撒盐，那片水 60 秒不结冰",
+	stir = "点一下搅动泥层，把氧气带下去",
 }
 const TIP := {
 	nutrient = "营养投放\n点击培养皿中的位置，投放一团营养物质，吸引附近的细胞。\n藻团靠营养生长；也可以直接在培养皿上点右键投放。",
@@ -31,6 +32,7 @@ const TIP := {
 	iron = "撒铁粉
 在点击处撒一片铁粉（半径 220 µm），40 秒内把那里的氧气吸掉，变成一块临时的无氧水。
 原型是远古海洋里的铁：地球上最早的氧气，先被海水里的铁吸收，沉成了一层层红色的条带状铁矿。",
+	stir = "搅动泥层\n在点击处把泥水搅一搅（半径 200 µm），30 秒内上层的氧气被带进深处，硫化氢被冲淡。\n用来让好氧的生命往下探，或把怕氧的对手赶走。原型是沼泽里被风浪、动物翻动的泥。",
 	brine = "撒盐\n在点击处撒一片盐（半径 170 µm），60 秒内那里的水不会结冰，长夜里是一块临时避难所。\n原型是海冰里的盐水通道：海水结冰时盐被挤出来，留下不结冰的细小水道，冰下微生物就住在那里。",
 }
 
@@ -80,6 +82,7 @@ func _process(_delta: float) -> void:
 	cards.phage.visible = lv.get("interventions", []).has("phage")
 	# (Chapter 6's iron dust takes the phage's place and key.)
 	cards.iron.visible = lv.get("interventions", []).has("iron")
+	cards.stir.visible = lv.get("interventions", []).has("stir")
 	# (Chapter 7's salt takes the warm/cold spot's place and key.)
 	cards.brine.visible = lv.get("interventions", []).has("brine")
 	cards.heat.visible = not cards.brine.visible
@@ -152,6 +155,7 @@ class Card extends Control:
 				"current": return ["按住从起点拖向终点 · Esc 取消", Ui.ACCENT]
 				"irritant": return ["左键点它的头部 · Esc 取消", Ui.ACCENT]
 				"iron": return ["左键点培养皿撒铁粉 · Esc 取消", Ui.ACCENT]
+				"stir": return ["左键点泥里搅动 · Esc 取消", Ui.ACCENT]
 				"brine": return ["左键点培养皿撒盐 · Esc 取消", Ui.ACCENT]
 		if not iv.open_here(kind):
 			var lr: Node = iv.host.level_runner
@@ -232,7 +236,7 @@ class Card extends Control:
 
 	# The irritant answers to the current's key.
 	static func key_of(k: String) -> String:
-		if k == "iron":
+		if k == "iron" or k == "stir":
 			return "phage"
 		if k == "brine":
 			return "heat"
@@ -246,6 +250,11 @@ class Card extends Control:
 				for p in [Vector2(-9, -7), Vector2(-2, -10), Vector2(6, -8), Vector2(-6, 0), Vector2(3, -2), Vector2(9, 1), Vector2(-9, 7), Vector2(-1, 6), Vector2(7, 8)]:
 					draw_rect(Rect2(c + p - Vector2(1.6, 1.6), Vector2(3.2, 3.2)), Color(0.55, 0.78, 0.95, ink.a))
 				draw_arc(c, 13.0, PI * 0.1, PI * 0.9, 12, Color(ink, 0.5), 1.2, true)
+			"stir":
+				# A swirl through the mud line.
+				for i in 3:
+					draw_arc(c, 4.0 + i * 4.0, i * 1.7, i * 1.7 + PI * 1.3, 14, Color(ink, 0.85 - i * 0.2), 1.4, true)
+				draw_line(c + Vector2(-12, 8), c + Vector2(12, 8), Color(0.55, 0.42, 0.3, ink.a), 1.6)
 			"iron":
 				# Rust grains settling.
 				for p in [Vector2(-9, -8), Vector2(-2, -11), Vector2(6, -9), Vector2(-6, -2), Vector2(2, -4), Vector2(9, -1), Vector2(-10, 5), Vector2(-3, 4), Vector2(5, 6), Vector2(0, 11), Vector2(-7, 11), Vector2(8, 11)]:

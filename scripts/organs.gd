@@ -49,6 +49,16 @@ const LIST := [
 	{id = "spore", name = "芽孢外壳", en = "SPORE COAT", opens = "7-2",
 		desc = "能把自己封进一层厚壳，变成芽孢：不吃不动，冻不死、煮不死、吃不掉，等环境变好再发芽（原型：枯草芽孢杆菌的芽孢）。",
 		needs = {act = [Rules.A_TO_SPORE]}, body = {}},
+	# Chapter 8 (DECISIONS Q244 / Q246 / Q247).
+	{id = "decomp", name = "分解酶", en = "DECOMPOSING ENZYME", opens = "8-1", pair = "diet",
+		desc = "把酶放到体外分解尸体和空壳（原型：分解者）。装上后不再吃藻团，改吃空壳；吃的时候有一部分养分留在水里，附近的藻团会长得更快。「游向藻团」这张卡会让细胞游向空壳。",
+		needs = {}, body = {decomp = 0.35}},
+	{id = "phago", name = "吞噬泡", en = "PHAGOSOME", opens = "8-2",
+		desc = "能把别的细胞整个吞进体内。用「吞下不消化」吞下紫光游丝，它会留在体内帮你用氧：有氧时产能大增，但细胞变大、游得更慢（原型：内共生，线粒体的起源）。",
+		needs = {cond = [Rules.C_SYMB], act = [Rules.A_SWALLOW]}, body = {phago = true}},
+	{id = "toxin", name = "毒素腺", en = "TOXIN GLAND", opens = "8-3",
+		desc = "能分泌两种毒素压制别的物种，自己不怕（原型：链霉菌和它的抗生素）。挨过毒活下来的对手会慢慢耐药，两种毒素要轮换着用。",
+		needs = {act = [Rules.A_TOXIN_A, Rules.A_TOXIN_B]}, body = {toxin = true}},
 ]
 
 

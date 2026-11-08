@@ -155,6 +155,35 @@ func _build_body() -> void:
 			wl.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 			wl.custom_minimum_size.x = 700
 			right.add_child(wl)
+	# Diagnostic teaching: past chapter 1, what killed them this run, from
+	# the run's own numbers, and what answers it (Diagnose).
+	if not got[0] and not Levels.guided(level) and runner and runner.host and runner.host.sim:
+		var sim: SimCore = runner.host.sim
+		var causes: Array = Diagnose.causes(sim, runner.eval.sp)
+		var total := 0
+		for c: Array in causes:
+			total += int(c[1])
+		if total > 0:
+			right.add_child(Ui.caption("这一局的诊断", "DIAGNOSIS"))
+			var parts := []
+			for c: Array in causes.slice(0, 3):
+				parts.append("%s %d%%" % [c[0], roundi(100.0 * float(c[1]) / float(total))])
+			var dl := Ui.label("死亡 %d 只：%s" % [total, "、".join(parts)], 16, Ui.INK, Ui.sans(600))
+			dl.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+			dl.custom_minimum_size.x = 700
+			right.add_child(dl)
+			var zero := {t = 0.0, alive = 0, births = 0, starved = 0, eaten = 0, aged = 0, temp = 0, acid = 0, o2 = 0, phage = 0}
+			var now := Diagnose.snapshot(sim, runner.eval, runner.eval.t)
+			var resp := int(runner.design.get("params", {}).get("resp", level.get("resp", 0)))
+			for r: Dictionary in Diagnose.read(level, sim, runner.eval, zero, now, resp).slice(0, 2):
+				var rl := Ui.label("·  " + str(r.text).replace("
+", " "), 15, Ui.INK_SOFT, Ui.sans(500))
+				rl.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+				rl.custom_minimum_size.x = 700
+				right.add_child(rl)
+			var gap0 := Control.new()
+			gap0.custom_minimum_size.y = 8
+			right.add_child(gap0)
 	# Not passed: what passes it, said plainly (playtest: "不然我怎么知道").
 	# The first miss gives a direction; from the second on, the how.
 	if not got[0] and level.has("tips"):
@@ -263,6 +292,14 @@ func _build_body() -> void:
 	back.custom_minimum_size = Vector2(130, 40)
 	back.pressed.connect(func() -> void: action.emit("exit", null))
 	foot.add_child(back)
+	# Diagnostic teaching: two misses in a row on a level, the step-by-step
+	# guide is offered (it never comes uninvited past chapter 1).
+	if not got[0] and level.get("tutorial", false) and not Levels.guided(level) and int(CampaignSave.level(level.id).get("attempts", 1)) >= 2:
+		var guide := Widgets.Pill.new("跟着引导再试一次", 0, Ui.sans(600))
+		guide.custom_minimum_size = Vector2(170, 40)
+		guide.tooltip_text = "一步步带你设置这一关的关键零件"
+		guide.pressed.connect(func() -> void: action.emit("retry_guide", null))
+		foot.add_child(guide)
 	var retry := Widgets.Pill.new("改方案再试  R", 0, Ui.sans(600))
 	retry.custom_minimum_size = Vector2(160, 40)
 	retry.pressed.connect(func() -> void: action.emit("retry", {}))

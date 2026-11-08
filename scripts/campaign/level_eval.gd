@@ -72,6 +72,15 @@ var shot_times: Array = [] # ... and when
 var cold_share := 0.0 # level 4: share of the population on cold-ward lineages
 var founder := {topt = 12.0, tol = 2.5} # the released design's temperature genes
 var _sim: SimCore
+# Chapter 8.
+var symb_now := 0 # 8-2: cells carrying a symbiont
+var symb_by_t := -1.0
+var tox_used := [false, false] # 8-3: toxin A / B ever put out
+var rain_ends := 0 # 8-4: rains come through
+var _was_rain := false
+var slime := {} # 8-5: the slime mould, as get_slime() gives it
+var hold_t: Array = [] # ... seconds each food point has been held
+var _slime_last := 0.0
 
 
 func _init(l: Dictionary, species_index: int, used: float) -> void:
@@ -141,6 +150,28 @@ func observe(sim: SimCore, time: float) -> void:
 		while season_counts.size() < ends.size() and t >= float(ends[season_counts.size()][0]):
 			var se: Array = ends[season_counts.size()]
 			season_counts.append(count_in(sim, sp, {center = se[1], radius = float(se[2])}))
+	# Chapter 8.
+	if level.goal.kind in ["symb_end"] or level.challenge.kind == "symb_by":
+		symb_now = sim.get_symb_count(sp)
+		if level.challenge.kind == "symb_by" and symb_by_t < 0.0 and symb_now >= int(level.challenge.n):
+			symb_by_t = t
+	if level.goal.kind == "coexist_algae":
+		algae_now = int(sim.get_stats().energy_algae)
+	if level.challenge.kind == "both_toxins" and not (tox_used[0] and tox_used[1]):
+		for w in 2:
+			if not tox_used[w]:
+				var sum := 0.0
+				for v in sim.get_tox_field(w):
+					sum += v
+				tox_used[w] = sum > 2.0
+	if level.has("slime"):
+		_slime(sim)
+	if _was_rain and not sim_raining(sim):
+		rain_ends += 1
+		if level.goal.kind == "rains" and rain_ends >= int(level.goal.rains) and not goal_met and alive >= int(level.goal.n):
+			goal_met = true
+			goal_time = t
+	_was_rain = sim_raining(sim)
 	if level.has("helio"):
 		helio = sim.get_helio()
 		if level.goal.kind == "helio":
@@ -247,6 +278,39 @@ func observe(sim: SimCore, time: float) -> void:
 				goal_time = t
 
 
+
+# Chapter 8 (8-4): is it raining now (from the level's rain event)?
+func sim_raining(_s: SimCore) -> bool:
+	for e: Dictionary in level.get("events", []):
+		if e.kind == "rain":
+			var per := float(e.dry) + float(e.wet)
+			return fposmod(t - float(e.get("offset", 0.0)), per) >= float(e.dry)
+	return false
+
+
+# Chapter 8 boss (8-5): a food point held long enough by enough of the
+# player's cells is theirs; four of them, or the mould starved, wins.
+func _slime(sim: SimCore) -> void:
+	slime = sim.get_slime()
+	var cfg: Dictionary = level.slime
+	var pts: Array = slime.points
+	if hold_t.size() != pts.size():
+		hold_t.resize(pts.size())
+		hold_t.fill(0.0)
+	var dt := t - _slime_last
+	_slime_last = t
+	for k in pts.size():
+		if int(pts[k].owner) == 1:
+			continue
+		var n := count_in(sim, sp, {center = pts[k].pos, radius = float(cfg.hold_r)})
+		hold_t[k] = float(hold_t[k]) + dt if n >= int(cfg.hold_n) else 0.0
+		if float(hold_t[k]) >= float(cfg.hold_t):
+			sim.set_slime_owner(k, 1)
+			slime = sim.get_slime()
+	if level.goal.kind == "slime" and not goal_met and alive > 0 and (bool(slime.dead) or int(slime.owned) >= int(cfg.need)):
+		goal_met = true
+		goal_time = t
+
 # The second line on the report: what the level's goal turns on.
 func _phage_line() -> int:
 	if level.has("giant"):
@@ -328,6 +392,13 @@ func finish() -> void:
 		goal_time = t
 	# Chapter 7 (7-4): enough in the bloom at every season's end.
 	if g.kind == "seasons" and not extinct and season_counts.size() >= (g.ends as Array).size() and season_counts.all(func(v: int) -> bool: return v >= int(g.n)):
+		goal_met = true
+		goal_time = t
+	# Chapter 8.
+	if g.kind == "coexist_algae" and not extinct and alive >= int(g.n) and alive2 >= int(g.n2) and algae_now >= int(g.algae):
+		goal_met = true
+		goal_time = t
+	if g.kind == "symb_end" and not extinct and symb_now >= int(g.n):
 		goal_met = true
 		goal_time = t
 	# Chapter 6: the water's mean oxygen at the end (6-3).
@@ -427,6 +498,14 @@ func challenge_met() -> bool:
 			return not extinct and o2_mean >= float(ch.frac)
 		"alive_b":
 			return not extinct and alive2 >= int(ch.n)
+		"symb_by":
+			return symb_by_t >= 0.0 and symb_by_t <= float(ch.seconds) and not extinct
+		"both_toxins":
+			return not extinct and tox_used[0] and tox_used[1]
+		"acid_max":
+			return not extinct and _sim != null and int(_sim.get_stats().species[sp].acid) <= int(ch.n)
+		"slime_by":
+			return not extinct and goal_met and goal_time <= float(ch.seconds)
 		"helio_by":
 			return not extinct and goal_met and goal_time <= float(ch.seconds)
 		"never_frozen":
@@ -535,6 +614,8 @@ static func prepare(l: Dictionary, design: Dictionary, seed: int, threads := 8) 
 		sim.set_net(l.net)
 	if l.has("helio"):
 		sim.set_helio(l.helio)
+	if l.has("slime"):
+		sim.set_slime(l.slime)
 	if l.has("colony"):
 		sim.set_colony(l.colony)
 		ev.blocks_used = (design.params.get("blocks", []) as Array).size()
@@ -686,6 +767,19 @@ static func tick_events(l: Dictionary, sim: SimCore, t0: float, t1: float, fired
 					sim.set_light_scale(float(e.get("night_light", 0.03)) if dark else 1.0)
 					sim.set_base_environment({temp = float(e.cold) if dark else float(e.warm)})
 					said.append({text = "长夜来了：全暗，水温降到 %d°C" % int(e.cold) if dark else "天亮了：水温回到 %d°C" % int(e.warm)})
+			"rain":
+				# Chapter 8 (8-4): dry spells and acid rain, over and over.
+				var per := float(e.dry) + float(e.wet)
+				var ph := fposmod(t1 - float(e.get("offset", 0.0)), per)
+				var wet := ph >= float(e.dry)
+				var nth := int(floor((t1 - float(e.get("offset", 0.0))) / per))
+				if not wet and ph >= float(e.dry) - 10.0 and not fired.has("%d_warn%d" % [k, nth]):
+					fired["%d_warn%d" % [k, nth]] = true
+					said.append({text = "酸雨 10 秒后到来：酸会从水面往下渗"})
+				if wet != bool(fired.get("%d_wet" % k, false)):
+					fired["%d_wet" % k] = wet
+					sim.set_rain(float(e.level) if wet else 0.0, float(e.get("top", 60.0)))
+					said.append({text = "酸雨来了：酸正从水面往下渗" if wet else "雨停了：酸会慢慢退去"})
 			"seasons":
 				# Chapter 7 (7-4): the bloom moves on with the season.
 				for w in e.list.size():
@@ -876,6 +970,10 @@ static func advance(run: Dictionary, step: float) -> void:
 	# across, 30 s).
 	while not run.plan.is_empty() and run.t >= float(run.plan[0].at):
 		var iv: Dictionary = run.plan.pop_front()
+		if iv.kind == "stir":
+			sim.add_stir(iv.pos, 200.0, 30.0)
+			run.eval.shots += 1
+			continue
 		if iv.kind == "iron":
 			# Chapter 6: where the net's rim has the most oxygen (a player sees
 			# it on the oxygen map), or where the plan says.

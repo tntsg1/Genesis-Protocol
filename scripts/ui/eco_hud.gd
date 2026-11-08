@@ -73,6 +73,7 @@ func setup(showcase: Node2D) -> void:
 	_build_tools()
 	_build_legend()
 	_build_hint()
+	_build_coach()
 	if GlassPanel.holo:
 		visor = Visor.new()
 		visor.host = host
@@ -354,8 +355,13 @@ var brand_code: Label
 func rebuild_world() -> void:
 	# Chapter 6: the first planet, not Europa.
 	if brand_name:
-		brand_name.text = "创生协议　·　星球一 · 热泉海床" if host.o2_world else "创生协议　·　木卫二冰下海洋样本"
-		brand_code.text = ("PLANET ONE  /  P1-00  /  DISH Ø 2120 µm" if host.o2_world else "EUROPA STATION  /  EUR-01  /  DISH Ø 2120 µm")
+		# (Chapters 7 and 8: planets two and three.)
+		var lr: Node = host.get("level_runner")
+		var ch := int(str(lr.level.get("id", "0")).get_slice("-", 0)) if lr and lr.get("level") else 0
+		var planets := {6: ["星球一 · 热泉海床", "PLANET ONE  /  P1-00"], 7: ["星球二 · 冰封海", "PLANET TWO  /  P2-00"], 8: ["星球三 · 酸性沼泽", "PLANET THREE  /  P3-00"]}
+		var pl: Array = planets.get(ch, planets[6] if host.o2_world else ["木卫二冰下海洋样本", "EUROPA STATION  /  EUR-01"])
+		brand_name.text = "创生协议　·　" + str(pl[0])
+		brand_code.text = str(pl[1]) + "  /  DISH Ø 2120 µm"
 	for c in species_box.get_children():
 		if c != species_box.get_child(0): # keep the caption
 			species_box.remove_child(c)
@@ -614,6 +620,90 @@ func _build_events() -> void:
 	panels["events"] = p
 
 
+# Diagnostic teaching (DECISIONS 诊断式教学, Q271): a small card at the
+# left, between the species and the log, when the run shows a typical problem: what
+# is happening and what answers it. It does not pause; after a few seconds it
+# folds to one line ("提示 · N"), which opens the run's hints again.
+var coach_panel: GlassPanel
+var coach_box: VBoxContainer
+var coach_fold: Widgets.Pill
+var coach_list: Array = [] # [{title, text}] this run, newest last
+var coach_open_t := 0.0
+const COACH_SHOW := 10.0
+
+
+func _build_coach() -> void:
+	coach_panel = GlassPanel.new(Vector4(16, 10, 16, 12))
+	add_child(coach_panel)
+	_place(coach_panel, Vector2(0, 0.5), Vector2(24, -70), 320)
+	var v := _vbox(coach_panel.body, 6)
+	var head := _hbox(v, 8)
+	head.add_child(Ui.caption("实验诊断", "DIAGNOSIS"))
+	var sp := Control.new()
+	sp.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	head.add_child(sp)
+	coach_fold = Widgets.Pill.new("", 0, Ui.sans(600))
+	coach_fold.custom_minimum_size = Vector2(76, 26)
+	coach_fold.pressed.connect(func() -> void: _coach_toggle())
+	head.add_child(coach_fold)
+	coach_box = _vbox(v, 8)
+	coach_panel.visible = false
+
+
+func coach_clear() -> void:
+	coach_list.clear()
+	if coach_panel:
+		coach_panel.visible = false
+
+
+func coach_say(title: String, text: String) -> void:
+	coach_list.append({title = title, text = text})
+	coach_open_t = COACH_SHOW
+	_coach_fill(true)
+	if not coach_panel.visible:
+		coach_panel.visible = true
+		coach_panel.appear(0.0)
+	else:
+		coach_panel.flash()
+	Audio.sfx("nutrient", -10.0, 1.6)
+
+
+# Open: the newest in full (or all of them, newest first, when reopened by
+# hand); folded: just the head line.
+func _coach_fill(newest_only: bool, open := true) -> void:
+	for c in coach_box.get_children():
+		c.queue_free()
+	coach_fold.text = ("收起 ▴" if open else "提示 · %d ▾" % coach_list.size())
+	coach_box.visible = open
+	if not open:
+		return
+	var shown: Array = [coach_list.back()] if newest_only else coach_list.duplicate()
+	if not newest_only:
+		shown.reverse()
+	for h: Dictionary in shown:
+		var t := Ui.label(h.title, 14, Ui.ACCENT, Ui.sans(700))
+		t.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+		t.custom_minimum_size.x = 288
+		coach_box.add_child(t)
+		var b := Ui.label(h.text, 12, Ui.INK, Ui.sans(500))
+		b.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+		b.custom_minimum_size.x = 288
+		coach_box.add_child(b)
+
+
+func _coach_toggle() -> void:
+	var open := not coach_box.visible
+	coach_open_t = 0.0 # (by hand: it stays as the player left it)
+	_coach_fill(false, open)
+
+
+func coach_tick(delta: float) -> void:
+	if coach_open_t > 0.0:
+		coach_open_t -= delta
+		if coach_open_t <= 0.0 and coach_box.visible:
+			_coach_fill(false, false)
+
+
 # A mode hint under the clock ("click to place ..."), and the quiet note
 # shown in observe mode.
 func _build_hint() -> void:
@@ -652,6 +742,8 @@ func ping_action(action: String) -> void:
 	# (Chapter 6's iron dust answers to the phage's key.)
 	if action == "phage" and dock_buttons.has("iron") and (dock_buttons["iron"] as Control).visible:
 		action = "iron"
+	if action == "phage" and dock_buttons.has("stir") and (dock_buttons["stir"] as Control).visible:
+		action = "stir"
 	if action == "heat" and dock_buttons.has("brine") and (dock_buttons["brine"] as Control).visible:
 		action = "brine"
 	if dock_buttons.has(action):

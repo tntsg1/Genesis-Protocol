@@ -240,6 +240,53 @@ const STEPS := {
 			{text = "点击「投放到培养皿」。", ring = "go", wait = "release", goal = "点击「投放到培养皿」。"}],
 		run = ["太阳虫周围那一圈是它的轴足能碰到的范围。它换地方时会把轴足收回来，这时最安全。"],
 	},
+	"8-1": {
+		design = ["这片沼泽分层：上面有光有氧，越往下氧越少、硫化氢越浓。
+
+这关设计两种生命：A 分解者吃空壳，把养分还给水；B 住在最深的泥里，吃硫化氢。",
+			{text = "A 已经装好「分解酶」：它不吃藻团，只吃空壳。「游向藻团」这张卡会让它游向空壳。
+
+它用氧呼吸，进了下面的硫化氢会中毒。打开「行为规则」，进入「高级编辑」。", ring = "mode_adv", wait = "mode:advanced", goal = "打开「高级编辑」。"},
+			{text = "加一张「不 氧气高于 30% → 游向氧气」，放在最上面：它往下游太深时会自己回到上层。", ring = "add", wait = "up_card", goal = "卡组里有「不 氧气高于 X → 游向氧气」。"},
+			{text = "点击顶部的「B · 泥层生物」。它装着硫化酶，是厌氧的，会投在最深处。", ring = "slot:1", wait = "slot:1"},
+			{text = "点击「投放到培养皿」。", ring = "go", wait = "release", goal = "点击「投放到培养皿」。"}],
+		run = ["空壳堆得深的地方，按 {phage} 搅动泥层：30 秒内氧气被带下去，分解者就能下去吃。"],
+	},
+	"8-2": {
+		design = ["你的生命是厌氧的：氧气会毒害它。上层漂着紫光游丝，它特别会用氧。
+
+把它吞进去不消化，它就住在你的细胞里帮你用氧。",
+			{text = "打开「行为规则」，进入「高级编辑」。", ring = "mode_adv", wait = "mode:advanced", goal = "打开「高级编辑」。"},
+			{text = "加一张「不 带着共生菌 → 吞下不消化」，放在最上面：还没吞到的细胞会去找紫光游丝。
+
+吞到以后，后代也都带着它。", ring = "add", wait = "swallow_card", goal = "卡组里有「不 带着共生菌 → 吞下不消化」。"},
+			{text = "点击「投放到培养皿」。", ring = "go", wait = "release", goal = "点击「投放到培养皿」。"}],
+		run = ["点一只细胞看看：带着共生菌的，细胞里有几个紫色小点。"],
+	},
+	"8-3": {
+		design = ["抢食游丝繁殖很快，把藻场占满了。你的生命装着「毒素腺」：放出毒云，伤别的物种，不伤自己。",
+			{text = "打开「行为规则」，进入「高级编辑」。", ring = "mode_adv", wait = "mode:advanced", goal = "打开「高级编辑」。"},
+			{text = "加两张卡：
+「别的物种在 60 µm 且 年龄超过 50% → 分泌毒素乙」
+「别的物种在 60 µm → 分泌毒素甲」
+
+放毒不占动作，细胞边吃边放。年轻的放甲、年长的放乙，两种毒素一起用，对手很难耐药。", ring = "add", wait = "toxin_cards", goal = "卡组里有分泌毒素甲和乙。"},
+			{text = "点击「投放到培养皿」。", ring = "go", wait = "release", goal = "点击「投放到培养皿」。"}],
+		run = ["点一只抢食游丝，能看到它对两种毒素各耐药多少。"],
+	},
+	"8-4": {
+		design = ["沼泽上空时常下酸雨，酸从水面往下渗。",
+			{text = "在基因组页「最适水温」下面，把「耐酸」拖到 50% 左右：酸伤少一半，平时多耗一点能量。", ring = "acid", wait = "acid_up", goal = "耐酸调到 40% 以上。"},
+			{text = "点击「投放到培养皿」。", ring = "go", wait = "release", goal = "点击「投放到培养皿」。"}],
+		run = ["右上角会倒数下一场酸雨。雨来之前，也可以用洋流把细胞往深处推一把。"],
+	},
+	"8-5": {
+		design = ["黏菌从中央朝六个藻场伸管道。碰到管道的细胞会被吞掉，连上的藻场它就吸干。",
+			{text = "这关有两个器官槽：装上「毒素腺」。毒云能烧断管道。", ring = "organ:toxin", wait = "organ:toxin", goal = "安装「毒素腺」。"},
+			{text = "打开「行为规则」，进入「高级编辑」，加一张「别的物种在 50 µm → 分泌毒素甲」：管道也算“别的物种”，细胞碰到管道附近就会放毒。", ring = "add", wait = "toxin_card", goal = "卡组里有分泌毒素的卡。"},
+			{text = "点击「投放到培养皿」。", ring = "go", wait = "release", goal = "点击「投放到培养皿」。"}],
+		run = ["藻场外圈的进度环满了，那个藻场就归你。先占还没被管道连上的。按 {membrane} 放隔离膜能挡住一条管道。"],
+	},
 	"3-1": {
 		design = ["暗水里视野很短，暗噬靠近时，往往只有离它最近的细胞能看见。试着让发现危险的细胞发出信号，提醒周围的同伴。",
 			{text = "暗噬游得比初始细胞快。先提高速度；预算不够的话，把繁殖降一级。", ring = "speed_fert", wait = "speed4", goal = "速度 → 4，繁殖 → 2（一共 12 点，正好守住低预算线）", why = "速度提高后，细胞更有机会逃脱暗噬。"},
@@ -793,6 +840,16 @@ func _met(w: String) -> bool:
 		return d != null and d.deck_editor.deck.any(func(c: Dictionary) -> bool:
 			return int(c.get("st", 0)) == Rules.S_ALERT and c.act == Rules.A_TO_FORAGE and c.c1 == Rules.C_STATE_TIME and float(c.t1) <= 14.0)
 	# Chapter 6.
+	if w == "up_card":
+		return d != null and d.deck_editor.deck.any(func(c: Dictionary) -> bool: return c.act == Rules.A_SEEK_O2)
+	if w == "swallow_card":
+		return d != null and d.deck_editor.deck.any(func(c: Dictionary) -> bool: return c.act == Rules.A_SWALLOW)
+	if w == "toxin_cards":
+		return d != null and d.deck_editor.deck.any(func(c: Dictionary) -> bool: return c.act == Rules.A_TOXIN_A) and d.deck_editor.deck.any(func(c: Dictionary) -> bool: return c.act == Rules.A_TOXIN_B)
+	if w == "toxin_card":
+		return d != null and d.deck_editor.deck.any(func(c: Dictionary) -> bool: return c.act == Rules.A_TOXIN_A or c.act == Rules.A_TOXIN_B)
+	if w == "acid_up":
+		return d != null and d.acid_tol >= 0.4
 	if w == "home_cards":
 		return d != null and d.deck_editor.deck.any(func(c: Dictionary) -> bool: return c.act == Rules.A_REMEMBER) and d.deck_editor.deck.any(func(c: Dictionary) -> bool: return c.act == Rules.A_RETURN)
 	if w == "spore_state":
@@ -1156,6 +1213,10 @@ func _ring_rect(key: String) -> Rect2:
 			c = d.mutate_pill if d else null
 		"resp":
 			c = d.resp_pill if d else null
+		"acid":
+			if d == null:
+				return Rect2()
+			c = d.tab_buttons["genome"] if d.page != "genome" else d.acid_slider
 		"life":
 			if d == null:
 				return Rect2()

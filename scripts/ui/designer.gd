@@ -90,6 +90,12 @@ var temp_slider: Control
 # where the level says (life_open), costing no budget.
 var life := 1.0
 var life_slider: Control
+# Chapter 8: born with a symbiont (真核, 8-2 on: euk_open) and acid
+# tolerance 0..1 (耐酸, acid_open), neither costing budget.
+var euk := false
+var euk_pill: Widgets.Pill
+var acid_tol := 0.0
+var acid_slider: Control
 var mutates := true # natural mutation (off = the line stays exactly as designed)
 var resp := Resp.ANAEROBIC # chapter 6: how it breathes (a switch from 6-4: Resp)
 var resp_pill: Widgets.Pill
@@ -1167,6 +1173,13 @@ func _build_gene_panel() -> void:
 				select_gene(7)
 				_refresh())
 			cell.add_child(temp_slider)
+			acid_slider = AcidSlider.new(acid_tol)
+			acid_slider.changed.connect(func(val: float) -> void:
+				acid_tol = val
+				select_gene(7)
+				_refresh())
+			acid_slider.visible = bool(level_rules.get("acid_open", false))
+			cell.add_child(acid_slider)
 		var desc := Ui.label(GENES[k][2], 13, Ui.INK_SOFT, Ui.sans())
 		desc.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 		desc.custom_minimum_size.x = 340
@@ -1605,6 +1618,11 @@ func _apply_design(d: Dictionary, record := false) -> void:
 	if life_slider:
 		life_slider.value = life
 		life_slider.queue_redraw()
+	acid_tol = float(d.get("acid_tol", 0.0))
+	if acid_slider:
+		acid_slider.value = acid_tol
+		acid_slider.queue_redraw()
+	_set_euk(bool(d.get("euk", false)))
 	_set_organs(d.get("organs", []))
 	color = d.color
 	name_edit.text = d.name
@@ -1698,7 +1716,7 @@ func apply_reference() -> void:
 
 func _design() -> Dictionary:
 	return {name = name_edit.text.strip_edges() if name_edit.text.strip_edges() != "" else "未命名物种",
-		color = color, genes = genes.duplicate(), deck = deck_editor.deck.duplicate(true), temp_opt = temp_opt, mutates = mutates, resp = resp, life = life,
+		color = color, genes = genes.duplicate(), deck = deck_editor.deck.duplicate(true), temp_opt = temp_opt, mutates = mutates, resp = resp, life = life, euk = euk, acid_tol = acid_tol,
 		organs = organs.duplicate(), persona = persona, bold = bold, blocks = body_bench.cells.duplicate(true) if body_bench else []}
 
 
@@ -1713,6 +1731,15 @@ func _set_resp(r: int) -> void:
 		resp_pill.visible = resp_open()
 		resp_pill.text = "呼吸：%s" % Resp.name_of(r)
 		resp_pill.tooltip_text = Resp.LIST[clampi(r, 0, 3)][2]
+	_refresh()
+
+
+func _set_euk(on: bool) -> void:
+	euk = on
+	if euk_pill:
+		euk_pill.visible = bool(level_rules.get("euk_open", false))
+		euk_pill.text = "真核：带共生菌" if on else "真核：不带"
+		euk_pill.active = on
 	_refresh()
 
 
@@ -1833,6 +1860,15 @@ func _build_footer() -> void:
 		_toast("呼吸方式：%s。%s" % [Resp.name_of(resp), Resp.LIST[resp][2]]))
 	h.add_child(resp_pill)
 	_set_resp(resp)
+	euk_pill = Widgets.Pill.new("", 150, Ui.sans(600))
+	euk_pill.custom_minimum_size.y = 44
+	euk_pill.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	euk_pill.tooltip_text = "带共生菌（真核）：一出生体内就有紫光游丝。有氧时产能大增，但更大、更慢、更耗能，没氧的地方反而吃亏"
+	euk_pill.pressed.connect(func() -> void:
+		_set_euk(not euk)
+		_toast("真核：带着共生菌出生，有氧时产能大增，但更大更慢。" if euk else "真核：不带共生菌。"))
+	h.add_child(euk_pill)
+	_set_euk(euk)
 	var save_b := Widgets.Pill.new("保存到物种库", 140, Ui.sans(600))
 	save_b.custom_minimum_size.y = 44
 	save_b.size_flags_vertical = Control.SIZE_SHRINK_CENTER
@@ -2299,6 +2335,9 @@ func _params_from(d: Dictionary) -> Dictionary:
 	params.life = lf
 	params.lifespan = float(params.lifespan) * lf
 	params.slow_divide = LifeSlider.divide_cost(lf)
+	# Chapter 8: a eukaryote (born with its symbiont), acid tolerance.
+	params.eukaryote = bool(d.get("euk", false)) and bool(level_rules.get("euk_open", false))
+	params.acid_tol = float(d.get("acid_tol", 0.0)) if bool(level_rules.get("acid_open", false)) else 0.0
 	# Chapter 6: how it breathes (the level's fixed way until the switch opens).
 	params.resp = int(d.get("resp", Resp.ANAEROBIC)) if resp_open() else int(level_rules.get("resp", 0))
 	if not (d.get("blocks", []) as Array).is_empty():
@@ -2552,6 +2591,45 @@ class LifeSlider extends Control:
 		draw_circle(Vector2(kx, y), 6.0, Color.WHITE)
 		draw_arc(Vector2(kx, y), 6.0, 0, TAU, 24, Ui.ACCENT, 1.6, true)
 		draw_string(Ui.mono("Medium"), Vector2(kx + 9.0, y - 4.0), "寿命 ×%.1f · 分裂所需 ×%.2f" % [value, divide_cost(value)], HORIZONTAL_ALIGNMENT_LEFT, -1, 10, Ui.INK)
+
+
+# Chapter 8: acid tolerance 0..1 (耐酸), costing no budget: acid hurts less,
+# the upkeep is more.
+class AcidSlider extends Control:
+	signal changed(value: float)
+	var value := 0.0
+	var _drag := false
+
+	func _init(v: float) -> void:
+		value = v
+		custom_minimum_size = Vector2(320, 26)
+		mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND
+		tooltip_text = "耐酸（不花预算）：越耐酸，酸水伤害越小，但平时越耗能"
+
+	func _x_of(v: float) -> float:
+		return 8.0 + (size.x - 16.0) * v
+
+	func _gui_input(event: InputEvent) -> void:
+		if event is InputEventMouseButton and (event as InputEventMouseButton).button_index == MOUSE_BUTTON_LEFT:
+			_drag = event.pressed
+			_set_from(event.position.x)
+		elif event is InputEventMouseMotion and _drag:
+			_set_from(event.position.x)
+
+	func _set_from(px: float) -> void:
+		var v := snappedf(clampf((px - 8.0) / (size.x - 16.0), 0.0, 1.0), 0.1)
+		if v != value:
+			value = v
+			queue_redraw()
+			changed.emit(v)
+
+	func _draw() -> void:
+		var y := size.y * 0.5
+		draw_line(Vector2(_x_of(0.0), y), Vector2(_x_of(1.0), y), Color(0.75, 0.85, 0.35, 0.45), 3.0)
+		var kx := _x_of(value)
+		draw_circle(Vector2(kx, y), 6.0, Color.WHITE)
+		draw_arc(Vector2(kx, y), 6.0, 0, TAU, 24, Ui.ACCENT, 1.6, true)
+		draw_string(Ui.mono("Medium"), Vector2(minf(kx + 9.0, size.x - 190.0), y - 4.0), "耐酸 %d%% · 酸伤 -%d%% · 耗能 +%d%%" % [roundi(value * 100.0), roundi(value * 85.0), roundi(value * 35.0)], HORIZONTAL_ALIGNMENT_LEFT, -1, 10, Ui.INK)
 
 
 class TempSlider extends Control:

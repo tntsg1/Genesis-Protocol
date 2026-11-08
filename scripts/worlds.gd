@@ -125,6 +125,14 @@ static func populate(sim: SimCore, cfg: Dictionary, on_species: Callable) -> voi
 	Ecology.apply(sim, layout)
 	if cfg.has("oxygen"):
 		sim.set_oxygen(cfg.oxygen)
+	# Chapter 8: the mud's layers (after the oxygen: it sets the water to them),
+	# its other knobs, and shells of the dead laid out ready.
+	if cfg.has("mud"):
+		sim.set_mud(cfg.mud)
+	if cfg.has("ch8"):
+		sim.set_ch8(cfg.ch8)
+	for sh: Array in cfg.get("shells", []): # [[pos, radius, n, each]]
+		sim.add_shells(sh[0], float(sh[1]), int(sh[2]), float(sh[3]), 0)
 	for pa: Array in cfg.get("algae_patches", []): # [[pos, radius, n, each]]: ready-grown food
 		sim.add_algae_patch(pa[0], float(pa[1]), int(pa[2]), float(pa[3]))
 	for w: Array in cfg.get("walls", []):

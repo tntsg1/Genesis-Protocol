@@ -29,6 +29,7 @@ var o2_world := false # chapter 6: this world has oxygen (O2Layer, environment l
 var net_world := false # chapter 6 boss: the pseudopod net (O2Layer draws it too)
 var o2_layer: O2Layer
 var ice_layer: IceLayer # chapter 7: the ice and the heliozoan
+var swamp_layer: SwampLayer # chapter 8: the mud, toxins, acid rain, the slime mould, symbionts
 var env_amount := 0.0
 var zone_labels: Node2D
 var _zone_zoom := 0.0
@@ -272,6 +273,8 @@ func load_world(cfg: Dictionary, world_seed := -1) -> void:
 		o2_layer.reset()
 	if ice_layer:
 		ice_layer.reset()
+	if swamp_layer:
+		swamp_layer.reset()
 	acc = 0.0
 	iv.reset(60.0)
 	nutrient_img = _field_image(sim.get_nutrient_field())
@@ -490,6 +493,10 @@ func _build_view() -> void:
 	ice_layer = IceLayer.new()
 	ice_layer.host = self
 	ice_layer.visible = false
+	swamp_layer = SwampLayer.new()
+	swamp_layer.host = self
+	swamp_layer.visible = false
+	add_child(swamp_layer)
 
 	var quad := QuadMesh.new()
 	quad.size = Vector2(1, 1)
@@ -517,6 +524,7 @@ func _build_view() -> void:
 	add_child(cells)
 	if ice_layer:
 		add_child(ice_layer)
+	add_child(swamp_layer.top)
 
 	analysis = AnalysisLayer.new()
 	add_child(analysis)
@@ -905,6 +913,13 @@ func start_level(l: Dictionary) -> void:
 		add_child(a2)
 		a2.finished.connect(func() -> void: start_level(l))
 		return
+	# Chapter 8: the passage to planet three before 8-1 (scripts/ui/arrival3.gd).
+	if l.get("arrival3", false) and not CampaignSave.seen("arrival_8") and not testing:
+		CampaignSave.mark_seen("arrival_8")
+		var a3: CanvasLayer = preload("res://scripts/ui/arrival3.gd").new()
+		add_child(a3)
+		a3.finished.connect(func() -> void: start_level(l))
+		return
 	# From the campaign page: the frame freezes, a lens opens at the station
 	# and grows over the screen; under it the level's dish is already there,
 	# far and soft, and racks into focus as the camera comes down to the
@@ -1076,6 +1091,10 @@ func _draw_overlay() -> void:
 				r = 30.0
 				col = Color(0.72, 0.36, 0.2)
 				text = "撒铁粉"
+			"stir":
+				r = 30.0
+				col = Color(0.62, 0.5, 0.32)
+				text = "搅动泥层"
 			"brine":
 				r = 30.0
 				col = Color(0.55, 0.78, 0.95)
@@ -1198,7 +1217,7 @@ func focus(pos: Vector2, zoom: float) -> void:
 func dock_action(key: String) -> void:
 	match key:
 		"observe": set_observe(not observing)
-		"nutrient", "membrane", "heat", "current", "phage", "irritant", "iron", "brine": iv.select(key)
+		"nutrient", "membrane", "heat", "current", "phage", "irritant", "iron", "brine", "stir": iv.select(key)
 		"track": toggle_track()
 		"report": open_report()
 		"designer": open_designer()
@@ -1851,7 +1870,7 @@ func _unhandled_input(event: InputEvent) -> void:
 				elif left_down and not left_dragged:
 					var at := _event_world(mb.position)
 					pointer.click(mb.position)
-					if mode in ["nutrient", "heat", "phage", "irritant", "iron", "brine"]:
+					if mode in ["nutrient", "heat", "phage", "irritant", "iron", "brine", "stir"]:
 						iv.place(mode, at)
 					elif mode == "release":
 						_do_release(at)

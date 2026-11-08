@@ -21,6 +21,7 @@ func check(ok: bool, what: String) -> void:
 
 
 func _initialize() -> void:
+	Levels.force_guides = true # (guides past chapter 1 come on request: here always)
 	CampaignSave.reset_for_tests()
 	root.add_child(preload("res://tests/test_window.gd").new())
 	scene = load("res://scenes/showcase.tscn").instantiate()

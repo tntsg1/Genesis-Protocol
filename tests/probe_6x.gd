@@ -96,6 +96,35 @@ func _initialize() -> void:
 			plans.append(["默认", _design(l, [2.0, 2.0, 1, 1, 3.0, 3.0, 3, 3], base, [])])
 			plans.append(["不休息", _design(l, [2.0, 2.0, 1, 1, 3.0, 3.0, 3, 3], roam, [])])
 			plans.append(["快 不休息", _design(l, [3.0, 3.0, 1, 1, 2.0, 2.0, 3, 3], roam, [])])
+		"8-1":
+			var up := [R.card(R.C_O2_ABOVE, 0.3, R.C_NONE, 0.0, R.A_SEEK_O2)]
+			up[0].n1 = true
+			for v in [["默认", base, 2], ["找氧", up + base, 2], ["兼性", base, 3]]:
+				var a := _slot(l, 0, [], v[1], v[2])
+				a.extra = [_slot(l, 1).params]
+				plans.append(["分解者：%s" % v[0], a])
+		"8-2":
+			var sw := [R.card(R.C_SYMB, 0.0, R.C_NONE, 0.0, R.A_SWALLOW)]
+			sw[0].n1 = true
+			for g in [[2.0, 2.0, 1, 1, 3.0, 3.0, 4, 3], [2.0, 2.5, 1, 1, 3.5, 2.5, 4, 3]]:
+				plans.append(["不吞 %s" % str(g.slice(0, 6)), _design(l, g, base, ["phago"])])
+				plans.append(["先吞 %s" % str(g.slice(0, 6)), _design(l, g, sw + base, ["phago"])])
+		"8-3":
+			var ta := [R.card(R.C_RIVAL_NEAR, 60.0, R.C_NONE, 0.0, R.A_TOXIN_A)]
+			var tb := [R.card(R.C_RIVAL_NEAR, 60.0, R.C_AGE_ABOVE, 0.5, R.A_TOXIN_B)] + ta
+			plans.append(["不放毒", _design(l, [2.0, 2.0, 1, 1, 3.0, 3.0, 4, 3], base, ["toxin"])])
+			plans.append(["只毒甲", _design(l, [2.0, 2.0, 1, 1, 3.0, 3.0, 4, 3], ta + base, ["toxin"])])
+			plans.append(["甲乙按年龄", _design(l, [2.0, 2.0, 1, 1, 3.0, 3.0, 4, 3], tb + base, ["toxin"])])
+		"8-4":
+			for v in [[0.0, 2], [0.5, 2], [0.8, 2], [0.5, 3]]:
+				var d := _design(l, [2.0, 2.0, 1, 1, 3.0, 3.0, 4, 3], base, [], v[1])
+				d.params.acid_tol = v[0]
+				plans.append(["耐酸 %.1f 呼吸 %d" % v, d])
+		"8-5":
+			var tx := [R.card(R.C_RIVAL_NEAR, 50.0, R.C_NONE, 0.0, R.A_TOXIN_A)]
+			plans.append(["默认", _design(l, [2.0, 2.0, 1, 1, 3.0, 3.0, 5, 3], base, [])])
+			plans.append(["繁殖4", _design(l, [2.0, 2.0, 1, 1, 4.0, 3.0, 5, 3], base, [])])
+			plans.append(["毒素", _design(l, [2.0, 2.0, 1, 1, 3.5, 3.0, 5, 3], tx + base, ["toxin"])])
 		"6-4":
 			for r in [[2, 2], [1, 2], [3, 3]]:
 				var a := _slot(l, 0)
@@ -127,6 +156,21 @@ func _initialize() -> void:
 					diag += " 季%s" % str(ev.season_counts)
 				if id == "7-5":
 					diag += " 虫%.0f%%%s 过%d" % [float(ev.helio.get("energy_frac", 0.0)) * 100.0, "死" if ev.helio.get("dead", false) else "", ev.passed]
+			if id.begins_with("8-") and sim:
+				var s8: Dictionary = sim.get_stats().species[ev.sp]
+				diag += " 饿%d 酸%d 被吃%d 老%d 毒氧%d 生%d" % [int(s8.starved), int(s8.acid), int(s8.eaten), int(s8.aged), int(s8.o2), int(s8.births)]
+				if id == "8-1":
+					var sb: Dictionary = sim.get_stats().species[ev.sp2]
+					diag += " 藻%d B:饿%d 毒%d 生%d 壳%d" % [ev.algae_now, int(sb.starved), int(sb.o2), int(sb.births), sim.get_shell_count()]
+				if id == "8-2":
+					diag += " 共生%d(%.0fs) 吞%d" % [ev.symb_now, ev.symb_by_t, sim.get_swallowed()]
+				if id == "8-3":
+					var rm: Vector2 = sim.get_res_mean(0)
+					diag += " 对手%d 耐甲%.2f 耐乙%.2f 毒%s" % [ev.rival_alive, rm.x, rm.y, str(ev.tox_used)]
+				if id == "8-4":
+					diag += " 雨%d" % ev.rain_ends
+				if id == "8-5":
+					diag += " 菌%.0f%%%s 占%d 连%d 吃%d 断%d" % [float(ev.slime.get("energy_frac", 0.0)) * 100.0, "死" if ev.slime.get("dead", false) else "", int(ev.slime.get("owned", 0)), int(ev.slime.get("linked", 0)), int(ev.slime.get("eaten", 0)), int(ev.slime.get("cuts", 0))]
 			if l.has("net"):
 				diag += " 网%.0f%%(峰%.0f%%) 达成%ds 吃%d" % [ev.net_cov * 100, ev.net_cov_peak * 100, int(ev.net_done), ev.net_caught]
 			res[k] = [ev.stars(), ev.alive, ev.alive2, ev.alive3, ev.o2_mean, ev.held.duplicate(), ev.extinct, ev.t, diag], seeds)

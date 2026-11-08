@@ -24,6 +24,12 @@ var sp_index := -1
 var exit_armed := 0.0
 var report: Control
 var tutorial: Node
+# Diagnostic teaching (DECISIONS 诊断式教学): past chapter 1 the guide only
+# comes when asked for (the designer's 查看引导, or the report's offer after
+# two misses); this level's runs keep it until the level is passed.
+var want_guide := false
+var coach_snaps: Array = [] # Diagnose snapshots, one a second
+var coach_said := {} # problems said this run (each once)
 var boss_seen := 0 # level 10: how many devourers were last counted
 var tagged_id := -1 # the cell last tagged on the dish
 var boss_down := false # level 10: its starving was announced
@@ -52,6 +58,9 @@ func start(l: Dictionary, last_design := {}, entry_at := Vector2.INF) -> void:
 	if l.has("helio"):
 		host.sim.set_helio(l.helio)
 		host.ice_layer.reset()
+	if l.has("slime"):
+		host.sim.set_slime(l.slime)
+	host.swamp_layer.reset()
 	if l.has("net"):
 		host.sim.set_net(l.net)
 		host.net_world = true
@@ -70,7 +79,7 @@ func start(l: Dictionary, last_design := {}, entry_at := Vector2.INF) -> void:
 		host.focus(spot, 0.62)
 	# The guide comes back on every try until the level is passed (playtest:
 	# a retry without it left the player guessing); after that, on request.
-	if l.get("tutorial", false) and not CampaignSave.stars(l.id)[0] and not DevMode.on(DevMode.no_tutorial):
+	if l.get("tutorial", false) and not CampaignSave.stars(l.id)[0] and not DevMode.on(DevMode.no_tutorial) and (Levels.guided(l) or want_guide):
 		tutorial = preload("res://scripts/campaign/tutorial.gd").new()
 		tutorial.host = host
 		tutorial.runner = self
@@ -84,10 +93,30 @@ func start(l: Dictionary, last_design := {}, entry_at := Vector2.INF) -> void:
 	host.get_tree().create_timer(ENTRY_SECONDS + 0.5 if entry else 0.9).timeout.connect(func() -> void: open_designer(last_design))
 
 
+# Diagnostic teaching: past chapter 1, a typical problem in this run's
+# numbers is said once, as it shows (Diagnose).
+func _coach(t: float) -> void:
+	if Levels.guided(level) or (tutorial != null and is_instance_valid(tutorial)):
+		return
+	if coach_snaps.is_empty() or t - float(coach_snaps.back().t) >= 1.0:
+		coach_snaps.append(Diagnose.snapshot(host.sim, eval, t))
+	while coach_snaps.size() > 2 and t - float(coach_snaps[1].t) >= Diagnose.WINDOW:
+		coach_snaps.pop_front()
+	if coach_snaps.size() < 2 or t < 15.0:
+		return
+	var resp := int(design.get("params", {}).get("resp", level.get("resp", 0)))
+	for r: Dictionary in Diagnose.read(level, host.sim, eval, coach_snaps.front(), coach_snaps.back(), resp):
+		if not coach_said.has(r.id):
+			coach_said[r.id] = true
+			host.hud_root.coach_say(r.title, r.text)
+			break # (one at a time)
+
+
 # The designer's 重看引导: the level's guide from the start.
 func replay_tutorial() -> void:
 	if not level.get("tutorial", false):
 		return
+	want_guide = true
 	if is_instance_valid(tutorial):
 		tutorial.queue_free()
 	CampaignSave.clear_guide_at(level.id)
@@ -120,6 +149,8 @@ func open_designer(last_design := {}) -> void:
 	rules.resp = level.get("resp", 0)
 	rules.resp_open = level.get("resp_open", false)
 	rules.life_open = level.get("life_open", false)
+	rules.euk_open = level.get("euk_open", false)
+	rules.acid_open = level.get("acid_open", false)
 	rules.require_organs = level.get("require_organs", [])
 	rules.forbid_organs = level.get("forbid_organs", [])
 	if level.has("species"):
@@ -148,7 +179,8 @@ func on_design(params: Dictionary) -> void:
 		used += Resp.cost(int(params.get("resp", 0)))
 	design = {params = params, genes = genes, used = used,
 		design = {name = params.name, color = params.color, genes = genes, deck = params.deck, temp_opt = params.get("temp_opt", 12.0), mutates = params.get("mutates", true),
-			organs = params.get("organs", []), resp = params.get("resp", 0), life = params.get("life", 1.0)}}
+			organs = params.get("organs", []), resp = params.get("resp", 0), life = params.get("life", 1.0),
+			euk = params.get("eukaryote", false), acid_tol = params.get("acid_tol", 0.0)}}
 	if params.has("virus"):
 		design.virus = params.virus
 		design.design.virus = params.virus # (a retry starts from these points)
@@ -225,6 +257,9 @@ func on_released(i: int) -> void:
 	eval.founder = {topt = float(dp.get("temp_opt", 12.0)), tol = float(dp.get("temp_tol", 2.5))}
 	last_t = 0.0
 	fired = {}
+	coach_snaps.clear()
+	coach_said.clear()
+	host.hud_root.coach_clear()
 	# A goal zone far from the release: pull back so both are in view, the
 	# way there plain from the start (review round 3: "1-1 is small and empty").
 	if level.goal.kind == "zone_count":
@@ -257,10 +292,12 @@ func tick(_delta: float) -> void:
 		host.fx.nutrient_splash(pulses.at)
 		host.hud_root.notify("营养脉冲", Color(0.55, 0.8, 0.5), pulses.at)
 		next_pulse += float(pulses.every)
+	host.hud_root.coach_tick(_delta)
 	if t >= next_obs:
 		eval.observe(host.sim, t)
 		next_obs += 0.5
 		_update_objective(t)
+		_coach(t)
 		if eval.extinct:
 			finish()
 			return
@@ -836,6 +873,12 @@ func _on_report_action(what: String, arg: Variant) -> void:
 		return
 	_close_report()
 	match what:
+		"retry_guide":
+			report = null
+			host.paused = false
+			want_guide = true
+			CampaignSave.clear_guide_at(level.id)
+			start(level, design.design)
 		"retry":
 			# Same level, a fresh dish, the design on the bench (maybe changed).
 			report = null
@@ -848,11 +891,13 @@ func _on_report_action(what: String, arg: Variant) -> void:
 			var nl: Dictionary = Levels.ALL[level.index] if level.index < Levels.ALL.size() else {}
 			if not nl.is_empty() and Levels.playable(nl):
 				design = {}
+				want_guide = false
 				start(nl)
 			else:
 				exit_level()
 		"exit":
 			report = null
+			want_guide = false
 			exit_level()
 
 
