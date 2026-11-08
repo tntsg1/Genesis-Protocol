@@ -15,6 +15,7 @@ func check(ok: bool, what: String) -> void:
 
 
 func _initialize() -> void:
+	Levels.force_guides = true # (guides past chapter 1 come on request: here always)
 	CampaignSave.reset_for_tests()
 	root.add_child(preload("res://tests/test_window.gd").new())
 	scene = load("res://scenes/showcase.tscn").instantiate()
@@ -59,7 +60,7 @@ func _level11() -> void:
 	check(bay.chips.gland.modulate.a > 0.9 and bay.chips.chemo_rec.modulate.a > 0.9, "3-1: the signal gland and chemoreceptor are open")
 	check(not d.deck_editor.deck.is_empty() and d.deck_editor.deck[0].act == Rules.A_FLEE, "3-1: hunters about: the deck keeps its flee card")
 	g._next()
-	check(await _until(func() -> bool: return _says("2.8 级")), "3-1: the speed step")
+	check(await _until(func() -> bool: return _says("先提高速度")), "3-1: the speed step")
 	var gg: Array = d.genes.duplicate()
 	gg[0] = 4.0
 	gg[4] = 2.0
@@ -108,7 +109,7 @@ func _level11() -> void:
 	await _until(func() -> bool: return is_instance_valid(lr.report), 10.0)
 	await create_timer(1.5).timeout
 	await _shot("report", 6.0)
-	check(not _find_text(lr.report, "没告诉同伴") and not _find_text(lr.report, "没有一张卡让它跑") and not _find_text(lr.report, "跑得不比暗噬快") and not _find_text(lr.report, "会喊的器官") and _find_text(lr.report, "方向是对的"), "3-1: the guided plan failing: no hint blames it")
+	check(not _find_text(lr.report, "没告诉同伴") and not _find_text(lr.report, "没有一张卡让它跑") and not _find_text(lr.report, "跑得不比暗噬快") and not _find_text(lr.report, "会喊的器官") and _find_text(lr.report, "做得不错"), "3-1: the guided plan failing: no hint blames it")
 	lr.exit_level()
 	await _until(func() -> bool: return scene.level_runner == null)
 	scene.campaign.close()
@@ -130,18 +131,18 @@ func _level12() -> void:
 	check(g.ring.rect.intersects(bay.chips.recog.get_global_rect()), "3-2: the recognition protein is ringed")
 	bay.chips.recog.pressed.emit()
 	check(d.organs.has("recog"), "3-2: installed")
-	check(await _until(func() -> bool: return _says("高级编辑") or _says("繁殖期”的 +"), 8.0), "3-2: on to the rules page, advanced")
+	check(await _until(func() -> bool: return _says("高级编辑") or _says("添加「繁殖期」"), 8.0), "3-2: on to the rules page, advanced")
 	d.show_page("rules")
 	if d.has_method("set_rules_mode"):
 		d.set_rules_mode("advanced")
-	check(await _until(func() -> bool: return _says("繁殖期”的 +"), 8.0), "3-2: the breeding-state step")
+	check(await _until(func() -> bool: return _says("添加「繁殖期」"), 8.0), "3-2: the breeding-state step")
 	d.deck_editor.add_state(Rules.S_BREED)
-	check(await _until(func() -> bool: return _says("进入繁殖期”拖到"), 12.0), "3-2: then the way in")
+	check(await _until(func() -> bool: return _says("「进入繁殖期」拖到"), 12.0), "3-2: then the way in")
 	d.deck_editor.set_state(Rules.S_FORAGE)
 	await create_timer(0.4).timeout
 	var dv: int = d.deck_editor.deck.find_custom(func(c: Dictionary) -> bool: return c.act == Rules.A_DIVIDE)
 	d.deck_editor.set_action(dv, Rules.A_TO_BREED)
-	check(await _until(func() -> bool: return _says("卡槽满了"), 12.0), "3-2: then make room")
+	check(await _until(func() -> bool: return _says("规则卡已经满了"), 12.0), "3-2: then make room")
 	var rk: int = d.deck_editor.deck.find_custom(func(c: Dictionary) -> bool: return int(c.get("st", 0)) == Rules.S_FORAGE and c.act == Rules.A_REST)
 	await _until(func() -> bool: return g.ring.rect.intersects(d.deck_editor.card_rect(rk)), 4.0)
 	check(g.ring.rect.intersects(d.deck_editor.card_rect(rk)), "3-2: the rest card is ringed")
@@ -173,7 +174,7 @@ func _level12() -> void:
 	await _until(func() -> bool: return is_instance_valid(lr.report), 10.0)
 	await create_timer(1.5).timeout
 	await _shot("sync_report", 6.0)
-	check(not _find_text(lr.report, "认不出") and not _find_text(lr.report, "各生各的") and not _find_text(lr.report, "繁殖调低") and _find_text(lr.report, "方向是对的"), "3-2: the guided plan failing: no hint blames it")
+	check(not _find_text(lr.report, "认不出") and not _find_text(lr.report, "各生各的") and not _find_text(lr.report, "繁殖调低") and (_find_text(lr.report, "差一点") or _find_text(lr.report, "种群还差") or _find_text(lr.report, "路子对了")), "3-2: the guided plan failing: no hint blames it")
 	lr.exit_level()
 	await _until(func() -> bool: return scene.level_runner == null)
 	scene.campaign.close()
@@ -188,7 +189,7 @@ func _level13() -> void:
 	var g: Node = scene.level_runner.tutorial
 	check(not d.deck_editor.deck.any(func(c: Dictionary) -> bool: return c.act == Rules.A_FLEE), "3-3: no hunters: no flee card")
 	g._next()
-	check(await _until(func() -> bool: return _says("速度加到 3"), 8.0), "3-3: the genes step")
+	check(await _until(func() -> bool: return _says("速度调到 3"), 8.0), "3-3: the genes step")
 	var gg: Array = d.genes.duplicate()
 	gg[0] = 3.0
 	gg[4] = 4.0
@@ -227,7 +228,7 @@ func _level13() -> void:
 	await _until(func() -> bool: return is_instance_valid(lr.report), 10.0)
 	await create_timer(1.5).timeout
 	await _shot("quorum_report", 6.0)
-	check(not _find_text(lr.report, "自己啃硬藻") and not _find_text(lr.report, "落单的时候也在分泌") and not _find_text(lr.report, "就开始分泌") and _find_text(lr.report, "方向是对的"), "3-3: the guided plan failing: no hint blames it")
+	check(not _find_text(lr.report, "自己啃硬藻") and not _find_text(lr.report, "落单的时候也在分泌") and not _find_text(lr.report, "就开始分泌") and (_find_text(lr.report, "种群还差") or _find_text(lr.report, "再试一次")), "3-3: the guided plan failing: no hint blames it")
 	lr.exit_level()
 	await _until(func() -> bool: return scene.level_runner == null)
 	scene.campaign.close()
