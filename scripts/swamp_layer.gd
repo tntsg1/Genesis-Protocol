@@ -62,7 +62,11 @@ func reset() -> void:
 	var l: Dictionary = host.level_runner.level if host.level_runner else {}
 	var w: Dictionary = l.get("world", {})
 	mud = w.get("mud", {})
-	visible = (l.get("id", "") as String).begins_with("8-")
+	# (The sandbox: always on, the mud when its switch is.)
+	var sandbox: bool = host.level_runner == null
+	if sandbox:
+		mud = LevelsCh8.MUD if host.sandbox_world.is_on("mud") else {}
+	visible = (l.get("id", "") as String).begins_with("8-") or sandbox
 	top.visible = visible
 	fields.visible = false
 	_imgs.clear()

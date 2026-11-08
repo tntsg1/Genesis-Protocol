@@ -79,6 +79,12 @@ func _process(_delta: float) -> void:
 	points_label.text = "不限" if host.iv.unlimited() else "%d" % int(host.iv.points)
 	# (Only where there is a virus to drop.)
 	var lv: Dictionary = host.level_runner.level if host.level_runner else {}
+	# The sandbox: every tool (DECISIONS 沙盒补全 Q276).
+	if host.level_runner == null:
+		for k: String in KINDS:
+			cards[k].visible = true
+		bar.queue_redraw()
+		return
 	cards.phage.visible = lv.get("interventions", []).has("phage")
 	# (Chapter 6's iron dust takes the phage's place and key.)
 	cards.iron.visible = lv.get("interventions", []).has("iron")
@@ -146,7 +152,7 @@ class Card extends Control:
 		var host: Node2D = tray.host
 		var iv: Node = host.iv
 		var spec: Dictionary = ToolTray.IV.SPECS[kind]
-		var key := Keys.name_of(Keys.code(Card.key_of(kind)))
+		var key := Keys.name_of(Keys.code(kind if tray.host.level_runner == null else Card.key_of(kind)))
 		if host.mode == kind:
 			match kind:
 				"nutrient": return ["左键点培养皿投放 · Esc 取消", Ui.ACCENT]
@@ -207,7 +213,7 @@ class Card extends Control:
 			name = "局部降温" if iv.cold else "局部升温"
 		draw_string(f, Vector2(54, 22), name, HORIZONTAL_ALIGNMENT_LEFT, -1, 14, ink)
 		var nw := f.get_string_size(name, HORIZONTAL_ALIGNMENT_LEFT, -1, 14).x
-		var key := Keys.name_of(Keys.code(Card.key_of(kind)))
+		var key := Keys.name_of(Keys.code(kind if tray.host.level_runner == null else Card.key_of(kind)))
 		var km := Ui.mono("Medium")
 		var kw := km.get_string_size(key, HORIZONTAL_ALIGNMENT_LEFT, -1, 11).x + 10
 		var kr := Rect2(54 + nw + 8, 9, kw, 17)

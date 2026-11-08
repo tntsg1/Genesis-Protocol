@@ -30,6 +30,7 @@ var net_world := false # chapter 6 boss: the pseudopod net (O2Layer draws it too
 var o2_layer: O2Layer
 var ice_layer: IceLayer # chapter 7: the ice and the heliozoan
 var swamp_layer: SwampLayer # chapter 8: the mud, toxins, acid rain, the slime mould, symbionts
+var sandbox_world := SandboxWorld.new() # the sandbox's environment switches (G)
 var env_amount := 0.0
 var zone_labels: Node2D
 var _zone_zoom := 0.0
@@ -273,6 +274,7 @@ func load_world(cfg: Dictionary, world_seed := -1) -> void:
 		o2_layer.reset()
 	if ice_layer:
 		ice_layer.reset()
+	sandbox_world.reset()
 	if swamp_layer:
 		swamp_layer.reset()
 	acc = 0.0
@@ -493,6 +495,7 @@ func _build_view() -> void:
 	ice_layer = IceLayer.new()
 	ice_layer.host = self
 	ice_layer.visible = false
+	sandbox_world.host = self
 	swamp_layer = SwampLayer.new()
 	swamp_layer.host = self
 	swamp_layer.visible = false
@@ -732,6 +735,8 @@ func _process(delta: float) -> void:
 	_tick_capsule(delta)
 	if level_runner:
 		level_runner.tick(delta * (0.0 if paused or designer else 1.0))
+	elif not paused:
+		sandbox_world.tick()
 	_update_zone_labels()
 	overlay.queue_redraw()
 
@@ -1223,6 +1228,9 @@ func dock_action(key: String) -> void:
 		"designer": open_designer()
 		"analysis": set_analysis(not analyzing)
 		"filter": set_view_mode((view_mode + 1) % 3)
+		"world":
+			if level_runner == null:
+				hud_root.toggle_world_panel()
 
 
 func set_analysis(on: bool) -> void:
@@ -1924,6 +1932,12 @@ func _unhandled_input(event: InputEvent) -> void:
 			"slower": step_speed(-1)
 			"faster": step_speed(1)
 			"nutrient", "membrane", "heat", "current", "phage": iv.select(Keys.action_of(key))
+			"iron", "brine", "stir", "irritant":
+				if level_runner == null:
+					iv.select(Keys.action_of(key))
+			"world":
+				if level_runner == null:
+					hud_root.toggle_world_panel()
 			"track": toggle_track()
 			"designer": open_designer()
 			"observe": set_observe(not observing)

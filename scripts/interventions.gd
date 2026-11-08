@@ -109,6 +109,8 @@ func tick(sim_dt: float) -> void:
 
 # Level 24 puts the irritant in the current's slot (its card, its key).
 func slot_kind(kind: String) -> String:
+	if host.level_runner == null:
+		return kind # (the sandbox: every tool in its own slot)
 	if kind == "phage" and open_here("iron"):
 		return "iron"
 	if kind == "phage" and open_here("stir"):

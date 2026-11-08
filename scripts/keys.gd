@@ -12,6 +12,13 @@ const ACTIONS := [
 	["heat", "局部升降温", KEY_3],
 	["current", "洋流引导", KEY_4],
 	["phage", "投放病毒", KEY_5],
+	# (Sandbox, DECISIONS 沙盒补全 Q276: every tool its own key; in a level
+	# these four take another tool's slot and key.)
+	["iron", "撒铁粉（沙盒）", KEY_6],
+	["brine", "撒盐（沙盒）", KEY_7],
+	["stir", "搅动泥层（沙盒）", KEY_8],
+	["irritant", "刺激头冠（沙盒）", KEY_9],
+	["world", "环境开关（沙盒）", KEY_G],
 	["pause", "暂停 / 继续", KEY_SPACE],
 	["slower", "减速（¼× / 1× / 3× / 8×）", KEY_MINUS],
 	["faster", "加速", KEY_EQUAL],

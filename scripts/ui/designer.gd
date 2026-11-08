@@ -1164,7 +1164,7 @@ func _build_gene_panel() -> void:
 				life = val
 				select_gene(4)
 				_refresh())
-			life_slider.visible = bool(level_rules.get("life_open", false))
+			life_slider.visible = rule_open("life_open")
 			cell.add_child(life_slider)
 		if k == 7:
 			temp_slider = TempSlider.new(temp_opt)
@@ -1178,7 +1178,7 @@ func _build_gene_panel() -> void:
 				acid_tol = val
 				select_gene(7)
 				_refresh())
-			acid_slider.visible = bool(level_rules.get("acid_open", false))
+			acid_slider.visible = rule_open("acid_open")
 			cell.add_child(acid_slider)
 		var desc := Ui.label(GENES[k][2], 13, Ui.INK_SOFT, Ui.sans())
 		desc.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
@@ -1720,9 +1720,15 @@ func _design() -> Dictionary:
 		organs = organs.duplicate(), persona = persona, bold = bold, blocks = body_bench.cells.duplicate(true) if body_bench else []}
 
 
+# A switch a level opens (resp_open, life_open, euk_open, acid_open); the
+# sandbox has them all (DECISIONS 沙盒补全).
+func rule_open(key: String) -> bool:
+	return level_rules.is_empty() or DevMode.on(DevMode.all_genes) or bool(level_rules.get(key, false))
+
+
 # Chapter 6: the respiration switch, shown where a level opens it (6-4 on).
 func resp_open() -> bool:
-	return bool(level_rules.get("resp_open", false))
+	return rule_open("resp_open")
 
 
 func _set_resp(r: int) -> void:
@@ -1737,7 +1743,7 @@ func _set_resp(r: int) -> void:
 func _set_euk(on: bool) -> void:
 	euk = on
 	if euk_pill:
-		euk_pill.visible = bool(level_rules.get("euk_open", false))
+		euk_pill.visible = rule_open("euk_open")
 		euk_pill.text = "真核：带共生菌" if on else "真核：不带"
 		euk_pill.active = on
 	_refresh()
@@ -2331,13 +2337,13 @@ func _params_from(d: Dictionary) -> Dictionary:
 	}, d.get("organs", []))
 	params.merge(Rules.masks(level_id(), d.get("organs", [])), true)
 	# Chapter 7: the life slider.
-	var lf: float = float(d.get("life", 1.0)) if bool(level_rules.get("life_open", false)) else 1.0
+	var lf: float = float(d.get("life", 1.0)) if rule_open("life_open") else 1.0
 	params.life = lf
 	params.lifespan = float(params.lifespan) * lf
 	params.slow_divide = LifeSlider.divide_cost(lf)
 	# Chapter 8: a eukaryote (born with its symbiont), acid tolerance.
-	params.eukaryote = bool(d.get("euk", false)) and bool(level_rules.get("euk_open", false))
-	params.acid_tol = float(d.get("acid_tol", 0.0)) if bool(level_rules.get("acid_open", false)) else 0.0
+	params.eukaryote = bool(d.get("euk", false)) and rule_open("euk_open")
+	params.acid_tol = float(d.get("acid_tol", 0.0)) if rule_open("acid_open") else 0.0
 	# Chapter 6: how it breathes (the level's fixed way until the switch opens).
 	params.resp = int(d.get("resp", Resp.ANAEROBIC)) if resp_open() else int(level_rules.get("resp", 0))
 	if not (d.get("blocks", []) as Array).is_empty():

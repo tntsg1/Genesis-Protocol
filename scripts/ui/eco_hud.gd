@@ -74,6 +74,7 @@ func setup(showcase: Node2D) -> void:
 	_build_legend()
 	_build_hint()
 	_build_coach()
+	_build_world_panel()
 	if GlassPanel.holo:
 		visor = Visor.new()
 		visor.host = host
@@ -317,6 +318,10 @@ func set_level(l: Dictionary) -> void:
 	for k: String in DOCK_FROM:
 		if dock_buttons.has(k):
 			(dock_buttons[k] as Control).visible = not level_mode or int(l.index) >= int(DOCK_FROM[k])
+	if dock_buttons.has("world"):
+		(dock_buttons["world"] as Control).visible = not level_mode
+	if world_panel and level_mode:
+		world_panel.visible = false
 	var cap: HBoxContainer = env["objective_caption"]
 	(cap.get_child(1) as Label).text = ("OBJECTIVE · %s" % l.id) if level_mode else "OBJECTIVE · SAMPLE"
 	if level_mode:
@@ -650,6 +655,62 @@ func _build_coach() -> void:
 	coach_panel.visible = false
 
 
+# The sandbox's environment switches (DECISIONS 沙盒补全, Q275 b), on the
+# top left, beside the species list: G or the dock opens it.
+var world_panel: GlassPanel
+var world_pills := {}
+
+
+func _build_world_panel() -> void:
+	world_panel = GlassPanel.new(Vector4(16, 10, 16, 12))
+	add_child(world_panel)
+	_place(world_panel, Vector2(0, 0), Vector2(340, 104), 320)
+	var v := _vbox(world_panel.body, 6)
+	v.add_child(Ui.caption("环境开关", "ENVIRONMENT"))
+	var flow := HFlowContainer.new()
+	flow.add_theme_constant_override("h_separation", 6)
+	flow.add_theme_constant_override("v_separation", 6)
+	flow.custom_minimum_size.x = 288
+	v.add_child(flow)
+	for s: Array in SandboxWorld.SWITCHES:
+		var key: String = s[0]
+		var b := Widgets.Pill.new(s[1], 0, Ui.sans(600))
+		b.custom_minimum_size = Vector2(b.label_font.get_string_size(s[1], HORIZONTAL_ALIGNMENT_LEFT, -1, 13).x + 30, 30)
+		b.tooltip_text = s[2]
+		b.pressed.connect(func() -> void:
+			var said: String = host.sandbox_world.toggle(key)
+			_world_refresh()
+			notify(said, Ui.ACCENT))
+		flow.add_child(b)
+		world_pills[key] = b
+	v.add_child(Ui.caption("加入原生物种", "ADD NATIVES"))
+	var flow2 := HFlowContainer.new()
+	flow2.add_theme_constant_override("h_separation", 6)
+	flow2.add_theme_constant_override("v_separation", 6)
+	flow2.custom_minimum_size.x = 288
+	v.add_child(flow2)
+	for n: Array in SandboxWorld.NATIVES:
+		var name: String = n[0]
+		var b := Widgets.Pill.new("+ " + name, 0, Ui.sans(500))
+		b.custom_minimum_size = Vector2(b.label_font.get_string_size("+ " + name, HORIZONTAL_ALIGNMENT_LEFT, -1, 13).x + 30, 30)
+		b.tooltip_text = n[1]
+		b.pressed.connect(func() -> void: host.sandbox_world.add_native(name))
+		flow2.add_child(b)
+	world_panel.visible = false
+
+
+func toggle_world_panel() -> void:
+	world_panel.visible = not world_panel.visible
+	if world_panel.visible:
+		_world_refresh()
+		world_panel.appear(0.0)
+
+
+func _world_refresh() -> void:
+	for key: String in world_pills:
+		(world_pills[key] as Widgets.Pill).active = host.sandbox_world.is_on(key)
+
+
 func coach_clear() -> void:
 	coach_list.clear()
 	if coach_panel:
@@ -913,7 +974,7 @@ func _build_dock() -> void:
 	var h := _hbox(p.body, 6)
 	# Views only: the hands-on tools have their own tray (_build_tools).
 	var specs := [["observe", "观察", "V"], ["analysis", "分析", "X"], ["filter", "视图：普通", "C"], ["|"],
-		["track", "跟随", "F"], ["report", "报告", "R"], ["designer", "生命设计器", "Tab"]]
+		["track", "跟随", "F"], ["report", "报告", "R"], ["designer", "生命设计器", "Tab"], ["world", "环境开关", "G"]]
 	for spec: Array in specs:
 		if spec[0] == "|":
 			var sep := ColorRect.new()
