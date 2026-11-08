@@ -468,6 +468,47 @@ void SimCore::add_light(Vector2 pos, float radius, float power) {
 	light_profile(pos.x, pos.y, radius, power);
 }
 
+// The sandbox's terrain editor: every light taken out (spots and bands),
+// the dish's dim base left.
+void SimCore::reset_lights() {
+	spots.clear();
+	for (int j = 0; j < gh; j++) {
+		for (int i = 0; i < gw; i++) {
+			light_base[j * gw + i] = inside_dish((i + 0.5f) * cell, (j + 0.5f) * cell, 0.0f) ? 0.01f : 0.0f;
+		}
+	}
+	flow_age = 1000;
+	rebuild_env();
+}
+
+void SimCore::clear_zones() {
+	zones.clear();
+	rebuild_env();
+}
+
+// The eraser: algae clumps and shells in a circle taken away.
+void SimCore::remove_food(Vector2 pos, float radius, bool algae_too, bool shells_too) {
+	const float r2 = radius * radius;
+	if (algae_too) {
+		for (int a = 0; a < algae; a++) {
+			float dx = al_x[a] - pos.x, dy = al_y[a] - pos.y;
+			if (dx * dx + dy * dy < r2) {
+				energy_out += al_e[a];
+				al_e[a] = 0.0f;
+			}
+		}
+	}
+	if (shells_too) {
+		for (int k = 0; k < shells; k++) {
+			float dx = sh_x[k] - pos.x, dy = sh_y[k] - pos.y;
+			if (dx * dx + dy * dy < r2) {
+				energy_out += sh_e[k];
+				sh_e[k] = 0.0f;
+			}
+		}
+	}
+}
+
 void SimCore::light_pulse(Vector2 pos, float radius, float power, float seconds) {
 	light_pulses.push_back({ pos.x, pos.y, radius, power, 0.0f, seconds });
 	light_profile(pos.x, pos.y, radius, power);
@@ -7161,6 +7202,9 @@ void SimCore::_bind_methods() {
 	ClassDB::bind_method(D_METHOD("set_light_scale", "scale"), &SimCore::set_light_scale);
 	ClassDB::bind_method(D_METHOD("set_spore_times", "form", "germinate"), &SimCore::set_spore_times);
 	ClassDB::bind_method(D_METHOD("add_brine", "pos", "radius", "delta", "seconds"), &SimCore::add_brine);
+	ClassDB::bind_method(D_METHOD("reset_lights"), &SimCore::reset_lights);
+	ClassDB::bind_method(D_METHOD("clear_zones"), &SimCore::clear_zones);
+	ClassDB::bind_method(D_METHOD("remove_food", "pos", "radius", "algae", "shells"), &SimCore::remove_food);
 	ClassDB::bind_method(D_METHOD("set_mud", "params"), &SimCore::set_mud);
 	ClassDB::bind_method(D_METHOD("add_stir", "pos", "radius", "seconds"), &SimCore::add_stir);
 	ClassDB::bind_method(D_METHOD("set_rain", "level", "top"), &SimCore::set_rain);

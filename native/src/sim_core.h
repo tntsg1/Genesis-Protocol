@@ -790,6 +790,10 @@ public:
 	// Chapter 8. Mud: {o2_full (y, full oxygen above), o2_zero (none below),
 	// h2s_from (y, none above), h2s_full (y), h2s (max), relax, harm, safe}.
 	void set_mud(Dictionary params);
+	// The sandbox's terrain editor.
+	void reset_lights();
+	void clear_zones();
+	void remove_food(Vector2 pos, float radius, bool algae_too, bool shells_too);
 	int add_stir(Vector2 pos, float radius, float seconds);
 	// Acid rain: how hard it rains (0 none .. 1), from the top `top` down.
 	void set_rain(float level, float top);

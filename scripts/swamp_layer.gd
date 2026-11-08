@@ -65,7 +65,7 @@ func reset() -> void:
 	# (The sandbox: always on, the mud when its switch is.)
 	var sandbox: bool = host.level_runner == null
 	if sandbox:
-		mud = LevelsCh8.MUD if host.sandbox_world.is_on("mud") else {}
+		mud = host.sandbox_world.map.get("mud", {})
 	visible = (l.get("id", "") as String).begins_with("8-") or sandbox
 	top.visible = visible
 	fields.visible = false

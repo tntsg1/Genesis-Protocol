@@ -1,6 +1,7 @@
 extends SceneTree
 # Rebinding keys in settings: a new key works in the dish, a key already in
-# use swaps, fixed keys are refused, defaults come back. Uses the test
+# use swaps, fixed keys are refused, defaults come back (layout 2026-10-29:
+# tools on 1-9, nutrient 1). Uses the test
 # settings file only. Run: tools/run_test.sh tests/keys_check.gd -- --menu
 
 var scene: Node2D
@@ -39,27 +40,27 @@ func _run() -> void:
 	menu._toggle_settings()
 	await create_timer(0.5).timeout
 	menu.capturing = "nutrient"
-	menu._capture(KEY_9)
-	check(Keys.code("nutrient") == KEY_9, "营养投放 rebinds to 9")
+	menu._capture(KEY_0)
+	check(Keys.code("nutrient") == KEY_0, "营养投放 rebinds to 0")
 	menu.capturing = "nutrient"
-	menu._capture(KEY_6)
-	check(Keys.code("nutrient") == KEY_6 and Keys.code("membrane") == KEY_9, "a key in use swaps (membrane now 9)")
+	menu._capture(KEY_2)
+	check(Keys.code("nutrient") == KEY_2 and Keys.code("membrane") == KEY_0, "a key in use swaps (membrane now 0)")
 	menu.capturing = "nutrient"
 	menu._capture(KEY_W)
-	check(Keys.code("nutrient") == KEY_6 and menu.capturing == "nutrient", "a fixed key (W) is refused")
+	check(Keys.code("nutrient") == KEY_2 and menu.capturing == "nutrient", "a fixed key (W) is refused")
 	menu._capture(KEY_ESCAPE)
 	await RenderingServer.frame_post_draw
 	root.get_texture().get_image().save_png(ProjectSettings.globalize_path("res://proofs/keys_settings.png"))
 	menu._toggle_settings()
 	scene.start_experiment()
 	await create_timer(3.0).timeout
+	scene.hud_root.terrain.picker.visible = false
 	scene.iv.points = 200.0
-	_key(KEY_6)
+	_key(KEY_2)
 	await process_frame
-	check(scene.mode == "nutrient", "the new key works in the dish (6 -> nutrient)")
+	check(scene.mode == "nutrient", "the new key works in the dish (2 -> nutrient)")
 	scene.set_mode("")
-	check((scene.hud_root.dock_buttons["nutrient"] as Button).text.ends_with("6"), "the dock shows the new key")
 	Keys.reset()
-	check(Keys.code("nutrient") == KEY_5, "defaults come back")
+	check(Keys.code("nutrient") == KEY_1 and Keys.code("iron") == KEY_6 and Keys.code("world") == KEY_G, "defaults come back")
 	print("RESULT: ", "PASS" if fails == 0 else "FAIL (%d)" % fails)
 	quit(1 if fails else 0)

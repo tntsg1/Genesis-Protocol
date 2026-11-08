@@ -18,7 +18,7 @@ const ACTIONS := [
 	["brine", "撒盐（沙盒）", KEY_7],
 	["stir", "搅动泥层（沙盒）", KEY_8],
 	["irritant", "刺激头冠（沙盒）", KEY_9],
-	["world", "环境开关（沙盒）", KEY_G],
+	["world", "地形编辑（沙盒）", KEY_G],
 	["pause", "暂停 / 继续", KEY_SPACE],
 	["slower", "减速（¼× / 1× / 3× / 8×）", KEY_MINUS],
 	["faster", "加速", KEY_EQUAL],

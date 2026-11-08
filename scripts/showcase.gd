@@ -30,7 +30,7 @@ var net_world := false # chapter 6 boss: the pseudopod net (O2Layer draws it too
 var o2_layer: O2Layer
 var ice_layer: IceLayer # chapter 7: the ice and the heliozoan
 var swamp_layer: SwampLayer # chapter 8: the mud, toxins, acid rain, the slime mould, symbionts
-var sandbox_world := SandboxWorld.new() # the sandbox's environment switches (G)
+var sandbox_world := SandboxWorld.new() # the sandbox's terrain (the editor: G, EcoHud.terrain)
 var env_amount := 0.0
 var zone_labels: Node2D
 var _zone_zoom := 0.0
@@ -274,7 +274,6 @@ func load_world(cfg: Dictionary, world_seed := -1) -> void:
 		o2_layer.reset()
 	if ice_layer:
 		ice_layer.reset()
-	sandbox_world.reset()
 	if swamp_layer:
 		swamp_layer.reset()
 	acc = 0.0
@@ -496,6 +495,7 @@ func _build_view() -> void:
 	ice_layer.host = self
 	ice_layer.visible = false
 	sandbox_world.host = self
+	sandbox_world.reset()
 	swamp_layer = SwampLayer.new()
 	swamp_layer.host = self
 	swamp_layer.visible = false
@@ -864,6 +864,10 @@ func start_experiment() -> void:
 	get_tree().create_timer(2.2).timeout.connect(func() -> void: Audio.sfx("holo_on", -8.0, 1.3))
 	Audio.music("dish")
 	get_tree().create_timer(1.3).timeout.connect(hud_root.reveal)
+	# Where to start from (DECISIONS 地形编辑器 Q279).
+	get_tree().create_timer(2.4).timeout.connect(func() -> void:
+		if level_runner == null and not in_menu:
+			hud_root.terrain.show_picker())
 	get_tree().create_timer(2.6).timeout.connect(func() -> void:
 		if mode == "":
 			hud_root.show_hint("拖动画面移动视角（左 / 右 / 中键都可以）　·　滚轮缩放　·　WASD 平移　·　点小地图跳转")
@@ -976,6 +980,7 @@ func _on_level_exit() -> void:
 	paused = false
 	hud_root.set_level({})
 	hud_root.conceal()
+	sandbox_world.reset()
 	load_world(Worlds.sandbox(), 20261027)
 	advance(20.0)
 	in_menu = true
@@ -1230,7 +1235,7 @@ func dock_action(key: String) -> void:
 		"filter": set_view_mode((view_mode + 1) % 3)
 		"world":
 			if level_runner == null:
-				hud_root.toggle_world_panel()
+				hud_root.terrain.toggle()
 
 
 func set_analysis(on: bool) -> void:
@@ -1856,6 +1861,12 @@ func _open_dev_panel() -> void:
 func _unhandled_input(event: InputEvent) -> void:
 	if in_menu or cine or is_instance_valid(pause_menu):
 		return
+	# The sandbox's terrain editor takes its strokes and keys first.
+	if level_runner == null and hud_root.terrain:
+		var at := _event_world((event as InputEventMouse).position) if event is InputEventMouse else Vector2.INF
+		if hud_root.terrain.handle(event, at):
+			get_viewport().set_input_as_handled()
+			return
 	if event is InputEventMouseButton:
 		var mb := event as InputEventMouseButton
 		if mb.button_index == MOUSE_BUTTON_WHEEL_UP and mb.pressed:
@@ -1937,7 +1948,7 @@ func _unhandled_input(event: InputEvent) -> void:
 					iv.select(Keys.action_of(key))
 			"world":
 				if level_runner == null:
-					hud_root.toggle_world_panel()
+					hud_root.terrain.toggle()
 			"track": toggle_track()
 			"designer": open_designer()
 			"observe": set_observe(not observing)
