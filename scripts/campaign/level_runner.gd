@@ -29,6 +29,7 @@ var tutorial: Node
 # two misses); this level's runs keep it until the level is passed.
 var want_guide := false
 var coach_snaps: Array = [] # Diagnose snapshots, one a second
+var briefing: CanvasLayer # the level's briefing card, while it is up
 var coach_said := {} # problems said this run (each once)
 var boss_seen := 0 # level 10: how many devourers were last counted
 var tagged_id := -1 # the cell last tagged on the dish
@@ -90,7 +91,17 @@ func start(l: Dictionary, last_design := {}, entry_at := Vector2.INF) -> void:
 					add_child(tutorial))
 		else:
 			add_child(tutorial)
-	host.get_tree().create_timer(ENTRY_SECONDS + 0.5 if entry else 0.9).timeout.connect(func() -> void: open_designer(last_design))
+	# Before the designer: the level's briefing (its goal and what is special
+	# here), past chapter 1 and not on a retry (scripts/ui/briefing.gd).
+	host.get_tree().create_timer(ENTRY_SECONDS + 0.5 if entry else 0.9).timeout.connect(func() -> void:
+		if _should_brief(l, last_design):
+			briefing = Briefing.new(l)
+			host.add_child(briefing)
+			briefing.finished.connect(func() -> void:
+				briefing = null
+				open_designer(last_design))
+		else:
+			open_designer(last_design))
 
 
 # Diagnostic teaching: past chapter 1, a typical problem in this run's
@@ -110,6 +121,13 @@ func _coach(t: float) -> void:
 			coach_said[r.id] = true
 			host.hud_root.coach_say(r.title, r.text)
 			break # (one at a time)
+
+
+# The briefing comes on entering a level past chapter 1 (not on a retry,
+# not under a step-by-step guide; tests only when they ask for it).
+func _should_brief(l: Dictionary, last_design: Dictionary) -> bool:
+	var testing := "-s" in OS.get_cmdline_args() or "--script" in OS.get_cmdline_args()
+	return not Levels.guided(l) and last_design.is_empty() and tutorial == null and (not testing or Levels.force_briefing)
 
 
 # The designer's 重看引导: the level's guide from the start.

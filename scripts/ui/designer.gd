@@ -136,6 +136,9 @@ var body_bench: Control # level 21
 static var multicell := false
 static var virus_target := -1
 var multi_pill: Widgets.Pill
+# 本关要点: the level's goal and features over the page, on request.
+var points_panel: GlassPanel
+var points_pill: Widgets.Pill
 const SANDBOX_VIRUS := {burst = 3, speed = 3, shell = 3, stick = 3, temperate = false}
 const BodyBench := preload("res://scripts/ui/body_bench.gd")
 var page := "genome"
@@ -415,7 +418,15 @@ func _build_top() -> void:
 		h.add_child(b)
 		tab_buttons[key] = b
 	_spacer(h)
-	# In a level: the guide again, from the start.
+	# In a level: its goal and features while designing (本关要点), and the
+	# guide again, from the start.
+	if not level_rules.is_empty() and not Levels.by_id(str(level_rules.get("id", ""))).is_empty():
+		var pts := Widgets.Pill.new("本关要点", 96, Ui.sans(600))
+		pts.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+		pts.tooltip_text = "这一关的目标、星星和特点：设计时对照着看"
+		pts.pressed.connect(func() -> void: toggle_points())
+		h.add_child(pts)
+		points_pill = pts
 	if not level_rules.is_empty():
 		var guide := Widgets.Pill.new("查看引导", 96, Ui.sans(500))
 		guide.size_flags_vertical = Control.SIZE_SHRINK_CENTER
@@ -2351,6 +2362,40 @@ func release() -> void:
 	if virus_bench:
 		params.virus = virus_bench.virus.duplicate()
 	_leave(params)
+
+
+# 本关要点 (the briefing again, compact): the goal, the stars, the features.
+func toggle_points() -> void:
+	if points_panel and is_instance_valid(points_panel):
+		points_panel.queue_free()
+		points_panel = null
+		if points_pill:
+			points_pill.active = false
+		return
+	var l := Levels.by_id(str(level_rules.get("id", "")))
+	if l.is_empty():
+		return
+	points_panel = GlassPanel.new(Vector4(24, 18, 24, 18))
+	add_child(points_panel)
+	points_panel.anchor_left = 0.5
+	points_panel.anchor_right = 0.5
+	points_panel.grow_horizontal = Control.GROW_DIRECTION_BOTH
+	points_panel.offset_top = 96
+	points_panel.custom_minimum_size = Vector2(720, 0)
+	var v := VBoxContainer.new()
+	v.add_theme_constant_override("separation", 8)
+	points_panel.body.add_child(v)
+	v.add_child(Ui.caption("本关要点 · %s %s" % [str(l.id), str(l.get("name", ""))], "KEY POINTS"))
+	Briefing.fill_goal(v, l, 672.0)
+	if not (l.get("threats", []) as Array).is_empty():
+		v.add_child(Ui.caption("这关的特点", "WHAT TO KNOW"))
+		Briefing.fill_features(v, l, 672.0, true)
+	var close_b := Widgets.Pill.new("收起", 90, Ui.sans(500))
+	close_b.pressed.connect(func() -> void: toggle_points())
+	v.add_child(close_b)
+	if points_pill:
+		points_pill.active = true
+	points_panel.appear(0.0)
 
 
 # The body bench's blocks make the species (a level with one; the sandbox

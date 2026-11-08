@@ -1053,6 +1053,7 @@ const UNFINISHED := [] # chapters with more levels still to come: no "chapter co
 # Diagnostic teaching (DECISIONS 诊断式教学): chapter 1 teaches the basics
 # step by step; past it the guide only comes when asked for.
 static var force_guides := false # (tests of the guides: every level guided)
+static var force_briefing := false # (tests of the briefing card: shown under -s too)
 static func guided(l: Dictionary) -> bool:
 	return force_guides or (l.get("id", "") as String).begins_with("1-")
 
