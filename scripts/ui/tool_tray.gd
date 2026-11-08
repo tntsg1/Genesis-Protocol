@@ -175,6 +175,13 @@ class Card extends Control:
 			if cd > 0.0:
 				return ["冷却中，%.1f 秒后可用" % cd, Ui.INK_SOFT]
 		var d: String = ToolTray.DESC[kind]
+		# The sandbox: no virus designed yet: this card is the way to design one.
+		if kind == "phage" and host.level_runner == null:
+			if host.sandbox_world.virus_host < 0:
+				return ["还没有病毒：点这里设计一种", Ui.ACCENT]
+			var labels: Array = host.labels
+			var vh: int = host.sandbox_world.virus_host
+			d = "点一下投放你的病毒（感染%s）" % (str(labels[vh]) if vh < labels.size() else "")
 		if kind == "heat" and iv.cold:
 			d = "点一下放一块 −12°C 冷斑，40 秒"
 		return [d, Ui.INK_SOFT]

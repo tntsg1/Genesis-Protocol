@@ -136,6 +136,7 @@ var body_bench: Control # level 21
 static var multicell := false
 static var virus_target := -1
 var multi_pill: Widgets.Pill
+var keep_pick := false # a guide step's pre-selected card: + 添加规则 puts the new card under it
 # 本关要点: the level's goal and features over the page, on request.
 var points_panel: GlassPanel
 var points_pill: Widgets.Pill
@@ -1371,7 +1372,10 @@ func _build_deck() -> void:
 	add_button = Widgets.Pill.new("+  添加规则", 0, Ui.sans(600))
 	add_button.custom_minimum_size = Vector2(0, 44)
 	add_button.pressed.connect(func() -> void:
-		deck_editor.selected = -1
+		# (A guide step may have picked the card the new one goes under.)
+		if not keep_pick:
+			deck_editor.selected = -1
+		keep_pick = false
 		var k: int = deck_editor.add_card()
 		if k >= 0:
 			_scroll_to_card(k))

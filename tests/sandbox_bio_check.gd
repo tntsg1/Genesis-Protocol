@@ -39,13 +39,13 @@ func _shot(name: String) -> void:
 func _run() -> void:
 	await create_timer(1.5).timeout
 	scene.iv.select("phage")
-	_check(scene.mode != "phage", "没设计病毒时投放病毒会提示，不会进入投放")
-	scene.open_designer()
+	_check(scene.mode != "phage", "没设计病毒时按 5 不会进入投放")
 	await _until(func() -> bool: return scene.designer != null and not scene.designer.busy, 20.0)
 	var d: Control = scene.designer
+	await create_timer(0.6).timeout
+	_check(d != null and d.page == "virus", "没设计病毒时按 5 直接打开病毒设计页")
 	_check(d.tab_buttons.has("virus") and d.tab_buttons.has("body"), "沙盒设计器有病毒设计页和身体页")
-	d.show_page("virus")
-	await create_timer(1.0).timeout
+	await create_timer(0.6).timeout
 	await _shot("sandbox_virus")
 	d.virus_target = 0
 	scene.sandbox_world.set_virus(d.virus_bench.virus.duplicate(), 0)

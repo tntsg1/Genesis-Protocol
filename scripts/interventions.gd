@@ -126,8 +126,9 @@ func select(kind: String) -> void:
 	# The sandbox: the virus is the player's own design (the designer's
 	# 病毒设计 page) and needs a host picked first.
 	if kind == "phage" and host.level_runner == null and host.sandbox_world.virus_host < 0:
-		host.hud_root.notify("先在生命设计器的「病毒设计」页设计病毒、选好它感染谁", Ui.WARN)
-		Audio.sfx("ui_deny")
+		# Straight to where it is designed (the user: "你倒是给按钮啊").
+		host.hud_root.notify("还没有病毒：打开病毒设计页", Ui.ACCENT)
+		host.open_designer("virus")
 		return
 	if host.mode == kind:
 		if kind == "heat":

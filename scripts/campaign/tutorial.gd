@@ -157,10 +157,10 @@ const STEPS := {
 这关要同时设计两种生命：A 晨光丝负责把氧气推高，B 硫泉游丝要躲进没有氧气的地方。",
 			{text = "点击顶部的「B · 硫泉游丝」，切换过去。", ring = "slot:1", wait = "slot:1"},
 			{text = "打开「行为规则」，进入「高级编辑」。", ring = "mode_adv", wait = "mode:advanced", goal = "打开「高级编辑」。"},
-			{text = "点「+ 新卡」加一张规则卡：条件拖入左边的「氧气高于」，动作拖入左边的「避开氧气」。
+			{text = "点规则列表下面的「+ 添加规则」，最下面会多出一张空卡。
 
-这样硫泉游丝一碰到有氧的水，就会往氧气最少的地方游。", ring = "add", wait = "avoid_o2_card", src = "避开氧气", goal = "新卡：氧气高于 X → 避开氧气。", why = "设置好了。热泉附近的硫化物会吸掉氧气，那里就是它们的避难所。"},
-			{text = "规则从上往下检查。按住这张卡左边的 ⋮⋮，把它拖到最上面，让躲避比吃东西更优先。", ring = "avoid_handle", wait = "avoid_first", goal = "把「避开氧气」这张卡拖到第一张。"},
+把左边的「氧气高于」拖到空卡「如果」后面的格子，再把左边的「避开氧气」拖到「那么」后面的格子。条件左边的小圆钮是「不」，这里不要点它。", ring = "add", wait = "avoid_o2_card", src = "避开氧气", goal = "新卡：氧气高于 X → 避开氧气（不带「不」）。", why = "卡加好了。但它排在「总是 → 休息」下面，规则从上往下检查，现在还轮不到它。"},
+			{text = "按住这张卡最右边的 ⋮⋮，把它拖到第一张的位置，让躲避比吃东西、休息都优先。", ring = "avoid_handle", wait = "avoid_first", goal = "把「避开氧气」这张卡拖到第一张。", why = "设置好了。硫泉游丝一碰到有氧的水，就会往氧气最少的地方游；热泉附近的硫化物会吸掉氧气，那里就是它们的避难所。"},
 			{text = "两个物种都设置好了。点击「投放到培养皿」。", ring = "go", wait = "release", goal = "点击「投放到培养皿」。"}],
 		run = [{text = "有硫泉游丝被困在有氧的水里时，按 {phage} 在它们身边撒铁粉：40 秒内那里的氧气会被吸掉。", ring = "dock:iron", wait = "used:iron"}],
 	},
@@ -196,11 +196,9 @@ const STEPS := {
 这关要教你的生命记住回家的路。",
 			{text = "在器官槽里装上「记忆泡」。", ring = "organ:memory", wait = "organ:memory", goal = "安装「记忆泡」。"},
 			{text = "打开「行为规则」，进入「高级编辑」。", ring = "mode_adv", wait = "mode:advanced", goal = "打开「高级编辑」。"},
-			{text = "加两张卡：
-「不 温度不适 → 记住这里」：在暖水区里就记住那里。
-「能量高于 100% 且 温度不适 → 回到记忆点」：在外面吃饱了就回家分裂。
-
-「记住这里」不占用这一拍，放在最上面也没关系。", ring = "add", wait = "home_cards", goal = "卡组里有「记住这里」和「回到记忆点」。", why = "设置好了。吃饱的细胞会沿着冰墙绕回暖水区，后代也记得这个地方。"},
+			{text = "点规则列表下面的「+ 添加规则」，最下面会多出一张空卡。\n\n把左边的「温度不适」拖到空卡「如果」后面的格子，再点它左边的小圆钮，加上「不」；然后把左边的「记住这里」拖到「那么」后面的格子。\n\n这张卡的意思：不冷的时候（在暖水区里），记住这个地方。", ring = "add", wait = "card:remember", src = "记住这里", goal = "新卡：不 温度不适 → 记住这里"},
+			{text = "再点一次「+ 添加规则」。\n\n这张卡要两个条件：把「能量高于」拖到「如果」后面，把「温度不适」拖到「且 第二个条件」的格子（这里不加「不」）；再把「回到记忆点」拖到「那么」后面。\n\n意思是：在外面吃饱了、又冷，就回家分裂。", ring = "add", wait = "card:ret", src = "回到记忆点", goal = "新卡：能量高于 100% 且 温度不适 → 回到记忆点"},
+			{text = "规则从上往下检查，吃东西的卡会先把这一拍用掉。按住这张卡最右边的 ⋮⋮，把它拖到「游向藻团」那张卡的上面。两张新卡都要拖上去。", ring = "handle:REMEMBER", wait = "before_eat:REMEMBER,RETURN", goal = "「记住这里」和「回到记忆点」都排在「游向藻团」上面", why = "设置好了。吃饱的细胞会沿着冰墙绕回暖水区，后代也记得这个地方。"},
 			{text = "点击「投放到培养皿」。", ring = "go", wait = "release", goal = "点击「投放到培养皿」。"}],
 		run = ["点一只在外面吃饱的细胞，按 {track} 跟随，看它怎么绕过冰墙回家。"],
 	},
@@ -234,9 +232,11 @@ const STEPS := {
 
 两条路：别喂它，让它饿死；或者把细胞送到右边的雪藻腔。",
 			{text = "这关有两个器官槽：装上「记忆泡」和「芽孢外壳」。", ring = "organ:spore", wait = "organs75", goal = "同时安装「记忆泡」和「芽孢外壳」。"},
-			{text = "打开「行为规则」，进入「高级编辑」：加「不 温度不适 → 记住这里」「能量高于 100% 且 温度不适 → 回到记忆点」，再添加「芽孢」状态。
-
-少在门外乱逛、长夜里变成芽孢，它就抓不到东西。", ring = "add", wait = "boss_cards", goal = "卡组里有记忆两张卡，并添加了「芽孢」状态。"},
+			{text = "打开「行为规则」，进入「高级编辑」。", ring = "mode_adv", wait = "mode:advanced", goal = "打开「高级编辑」。"},
+			{text = "点规则列表下面的「+ 添加规则」，最下面会多出一张空卡。\n\n把「温度不适」拖到「如果」后面，点它左边的小圆钮加上「不」；把「记住这里」拖到「那么」后面。", ring = "add", wait = "card:remember", src = "记住这里", goal = "新卡：不 温度不适 → 记住这里"},
+			{text = "再点一次「+ 添加规则」：「如果」拖入「能量高于」，「且 第二个条件」拖入「温度不适」（不加「不」），「那么」拖入「回到记忆点」。", ring = "add", wait = "card:ret", src = "回到记忆点", goal = "新卡：能量高于 100% 且 温度不适 → 回到记忆点"},
+			{text = "规则从上往下检查，吃东西的卡会先把这一拍用掉。按住这张卡最右边的 ⋮⋮，把它拖到「游向藻团」那张卡的上面。两张新卡都要拖上去。", ring = "handle:REMEMBER", wait = "before_eat:REMEMBER,RETURN", goal = "两张记忆卡都排在「游向藻团」上面"},
+			{text = "点击上方状态图里虚线圈的「+」，添加「芽孢」状态：长夜里变成芽孢，太阳虫就抓不到它们。", ring = "state_map", wait = "spore_state", goal = "添加「芽孢」状态。", why = "少在门外乱逛、长夜里变成芽孢，它就抓不到东西。"},
 			{text = "点击「投放到培养皿」。", ring = "go", wait = "release", goal = "点击「投放到培养皿」。"}],
 		run = ["太阳虫周围那一圈是它的轴足能碰到的范围。它换地方时会把轴足收回来，这时最安全。"],
 	},
@@ -247,7 +247,8 @@ const STEPS := {
 			{text = "A 已经装好「分解酶」：它不吃藻团，只吃空壳。「游向藻团」这张卡会让它游向空壳。
 
 它用氧呼吸，进了下面的硫化氢会中毒。打开「行为规则」，进入「高级编辑」。", ring = "mode_adv", wait = "mode:advanced", goal = "打开「高级编辑」。"},
-			{text = "加一张「不 氧气高于 30% → 游向氧气」，放在最上面：它往下游太深时会自己回到上层。", ring = "add", wait = "up_card", goal = "卡组里有「不 氧气高于 X → 游向氧气」。"},
+			{text = "点规则列表下面的「+ 添加规则」，最下面会多出一张空卡。\n\n把左边的「氧气高于」拖到「如果」后面，点它左边的小圆钮加上「不」，把滑块拖到 30% 左右；再把左边的「游向氧气」拖到「那么」后面。\n\n意思是：氧气不到 30% 时（游得太深了），往上游。", ring = "add", wait = "card:up", src = "游向氧气", goal = "新卡：不 氧气高于 X → 游向氧气"},
+			{text = "规则从上往下检查，吃东西的卡会先把这一拍用掉。按住这张卡最右边的 ⋮⋮，把它拖到「游向藻团」那张卡的上面。", ring = "handle:SEEK_O2", wait = "before_eat:SEEK_O2", goal = "「游向氧气」排在「游向藻团」上面"},
 			{text = "点击顶部的「B · 泥层生物」。它装着硫化酶，是厌氧的，会投在最深处。", ring = "slot:1", wait = "slot:1"},
 			{text = "点击「投放到培养皿」。", ring = "go", wait = "release", goal = "点击「投放到培养皿」。"}],
 		run = ["空壳堆得深的地方，按 {phage} 搅动泥层：30 秒内氧气被带下去，分解者就能下去吃。"],
@@ -257,33 +258,32 @@ const STEPS := {
 
 把它吞进去不消化，它就住在你的细胞里帮你用氧。",
 			{text = "打开「行为规则」，进入「高级编辑」。", ring = "mode_adv", wait = "mode:advanced", goal = "打开「高级编辑」。"},
-			{text = "加一张「不 带着共生菌 → 吞下不消化」，放在最上面：还没吞到的细胞会去找紫光游丝。
-
-吞到以后，后代也都带着它。", ring = "add", wait = "swallow_card", goal = "卡组里有「不 带着共生菌 → 吞下不消化」。"},
+			{text = "点规则列表下面的「+ 添加规则」，最下面会多出一张空卡。\n\n把左边的「带着共生菌」拖到「如果」后面，点它左边的小圆钮加上「不」；再把「吞下不消化」拖到「那么」后面。\n\n意思是：还没吞到共生菌的细胞，去找紫光游丝吞下。吞到以后，后代也都带着它。", ring = "add", wait = "card:swallow", src = "吞下不消化", goal = "新卡：不 带着共生菌 → 吞下不消化"},
+			{text = "规则从上往下检查，吃东西的卡会先把这一拍用掉。按住这张卡最右边的 ⋮⋮，把它拖到「游向藻团」那张卡的上面。", ring = "handle:SWALLOW", wait = "before_eat:SWALLOW", goal = "「吞下不消化」排在「游向藻团」上面"},
 			{text = "点击「投放到培养皿」。", ring = "go", wait = "release", goal = "点击「投放到培养皿」。"}],
 		run = ["点一只细胞看看：带着共生菌的，细胞里有几个紫色小点。"],
 	},
 	"8-3": {
 		design = ["抢食游丝繁殖很快，把藻场占满了。你的生命装着「毒素腺」：放出毒云，伤别的物种，不伤自己。",
 			{text = "打开「行为规则」，进入「高级编辑」。", ring = "mode_adv", wait = "mode:advanced", goal = "打开「高级编辑」。"},
-			{text = "加两张卡：
-「别的物种在 60 µm 且 年龄超过 50% → 分泌毒素乙」
-「别的物种在 60 µm → 分泌毒素甲」
-
-放毒不占动作，细胞边吃边放。年轻的放甲、年长的放乙，两种毒素一起用，对手很难耐药。", ring = "add", wait = "toxin_cards", goal = "卡组里有分泌毒素甲和乙。"},
+			{text = "点规则列表下面的「+ 添加规则」，最下面会多出一张空卡。\n\n把「别的物种在」拖到「如果」后面，再把「分泌毒素甲」拖到「那么」后面。", ring = "add", wait = "card:toxA", src = "分泌毒素甲", goal = "新卡：别的物种在 X → 分泌毒素甲"},
+			{text = "再点一次「+ 添加规则」：「如果」拖入「别的物种在」，「且 第二个条件」拖入「年龄超过」（滑块拖到 50%），「那么」拖入「分泌毒素乙」。\n\n年轻的放甲、年长的放乙，两种毒素一起用，对手很难耐药。", ring = "add", wait = "card:toxB", src = "分泌毒素乙", goal = "新卡：别的物种在 且 年龄超过 50% → 分泌毒素乙"},
+			{text = "放毒不占动作，但要排在吃东西的卡上面才会被检查到。按住这张卡最右边的 ⋮⋮，把它拖到「游向藻团」那张卡的上面。两张毒素卡都要拖上去，「毒素乙」那张放在「毒素甲」上面。", ring = "handle:TOXIN_B", wait = "before_eat:TOXIN_B,TOXIN_A", goal = "两张毒素卡都排在「游向藻团」上面"},
 			{text = "点击「投放到培养皿」。", ring = "go", wait = "release", goal = "点击「投放到培养皿」。"}],
 		run = ["点一只抢食游丝，能看到它对两种毒素各耐药多少。"],
 	},
 	"8-4": {
 		design = ["沼泽上空时常下酸雨，酸从水面往下渗。",
-			{text = "在基因组页「最适水温」下面，把「耐酸」拖到 50% 左右：酸伤少一半，平时多耗一点能量。", ring = "acid", wait = "acid_up", goal = "耐酸调到 40% 以上。"},
+			{text = "基因组页右边的「耐温」那一行，水温滑条下面多了一条「耐酸」滑条。把它拖到 50% 左右：酸伤少一半，平时多耗一点能量。", ring = "acid", wait = "acid_up", goal = "耐酸调到 40% 以上。"},
 			{text = "点击「投放到培养皿」。", ring = "go", wait = "release", goal = "点击「投放到培养皿」。"}],
 		run = ["右上角会倒数下一场酸雨。雨来之前，也可以用洋流把细胞往深处推一把。"],
 	},
 	"8-5": {
 		design = ["黏菌从中央朝六个藻场伸管道。碰到管道的细胞会被吞掉，连上的藻场它就吸干。",
 			{text = "这关有两个器官槽：装上「毒素腺」。毒云能烧断管道。", ring = "organ:toxin", wait = "organ:toxin", goal = "安装「毒素腺」。"},
-			{text = "打开「行为规则」，进入「高级编辑」，加一张「别的物种在 50 µm → 分泌毒素甲」：管道也算“别的物种”，细胞碰到管道附近就会放毒。", ring = "add", wait = "toxin_card", goal = "卡组里有分泌毒素的卡。"},
+			{text = "打开「行为规则」，进入「高级编辑」。", ring = "mode_adv", wait = "mode:advanced", goal = "打开「高级编辑」。"},
+			{text = "点规则列表下面的「+ 添加规则」，最下面会多出一张空卡。\n\n把「别的物种在」拖到「如果」后面（滑块调到 50 µm），再把「分泌毒素甲」拖到「那么」后面。黏菌的管道也算“别的物种”，细胞靠近管道就会放毒。", ring = "add", wait = "card:toxA", src = "分泌毒素甲", goal = "新卡：别的物种在 X → 分泌毒素甲"},
+			{text = "规则从上往下检查，吃东西的卡会先把这一拍用掉。按住这张卡最右边的 ⋮⋮，把它拖到「游向藻团」那张卡的上面。", ring = "handle:TOXIN_A", wait = "before_eat:TOXIN_A", goal = "毒素卡排在「游向藻团」上面"},
 			{text = "点击「投放到培养皿」。", ring = "go", wait = "release", goal = "点击「投放到培养皿」。"}],
 		run = ["藻场外圈的进度环满了，那个藻场就归你。先占还没被管道连上的。按 {membrane} 放隔离膜能挡住一条管道。"],
 	},
@@ -574,6 +574,7 @@ func _next() -> void:
 		var pk: int = de.deck.find_custom(func(c: Dictionary) -> bool: return c.act == int(cur.pick))
 		if pk >= 0:
 			de.selected = pk
+			host.designer.keep_pick = true
 			de.queue_redraw()
 	count_label.text = ("继续上次引导　" if resumed else "") + "第 %d / %d 步" % [at, _total()]
 	resumed = false
@@ -679,13 +680,13 @@ func _met(w: String) -> bool:
 			return d != null and (d.organs.has("silica") or d.organs.has("spines"))
 		"flee_attacked":
 			return d != null and d.deck_editor.deck.any(func(c: Dictionary) -> bool:
-				return c.act == Rules.A_FLEE and Rules.C_ATTACKED in [c.c1, c.c2])
+				return c.act == Rules.A_FLEE and _has(c, Rules.C_ATTACKED))
 		"flee_or":
 			return d != null and d.deck_editor.deck.any(func(c: Dictionary) -> bool:
-				return c.act == Rules.A_FLEE and c.get("any", false) and Rules.C_ATTACKED in [c.c1, c.c2])
+				return c.act == Rules.A_FLEE and c.get("any", false) and _has(c, Rules.C_ATTACKED))
 		"hunt_card":
 			return d != null and d.deck_editor.deck.any(func(c: Dictionary) -> bool:
-				return c.act == Rules.A_HUNT and [c.c1, c.c2].any(func(x: int) -> bool: return x in [Rules.C_SEE_PREY, Rules.C_PREY_NEAR, Rules.C_PREY_SMALL]))
+				return c.act == Rules.A_HUNT and (_has(c, Rules.C_SEE_PREY) or _has(c, Rules.C_PREY_NEAR) or _has(c, Rules.C_PREY_SMALL)))
 		"ambush":
 			return d != null and d.deck_editor.deck.any(func(c: Dictionary) -> bool:
 				return c.act == Rules.A_REST and c.c1 == Rules.C_NONE and c.c2 == Rules.C_NONE)
@@ -717,7 +718,7 @@ func _met(w: String) -> bool:
 		return int(host.sim.get_agent(host.selected).get("species", -1)) == int(runner.level.goal.get("rival", -1))
 	if w == "shout_b":
 		return d != null and d.deck_editor.deck.any(func(c: Dictionary) -> bool:
-			return int(c.get("st", 0)) == Rules.S_FORAGE and c.act == Rules.A_EMIT_B and Rules.C_PREDATOR_NEAR in [c.c1, c.c2])
+			return int(c.get("st", 0)) == Rules.S_FORAGE and c.act == Rules.A_EMIT_B and _has(c, Rules.C_PREDATOR_NEAR))
 	if w == "smell_b":
 		return d != null and d.deck_editor.deck.any(func(c: Dictionary) -> bool:
 			return int(c.get("st", 0)) == Rules.S_FORAGE and c.act == Rules.A_FLEE and ((c.c1 == Rules.C_SIGNAL_B and not c.get("n1", false)) or (c.c2 == Rules.C_SIGNAL_B and not c.get("n2", false))))
@@ -731,7 +732,7 @@ func _met(w: String) -> bool:
 	# Level 17 (the phage as a weapon).
 	if w == "c2_age":
 		var k2 := _forage_card(1)
-		return d != null and k2 >= 0 and Rules.C_AGE_ABOVE in [d.deck_editor.deck[k2].c1, d.deck_editor.deck[k2].c2]
+		return d != null and k2 >= 0 and _has(d.deck_editor.deck[k2], Rules.C_AGE_ABOVE)
 	if w == "body_walled_1":
 		return d != null and d.body_bench != null and int(Colony.stats(d.body_bench.cells).walled) <= 1
 	# Level 22: armour on the rim, a store put in.
@@ -764,7 +765,7 @@ func _met(w: String) -> bool:
 			return int(c.get("st", 0)) == Rules.S_FORAGE and c.act == Rules.A_AGGREGATE)
 	if w == "wake_card":
 		return d != null and d.deck_editor.deck.any(func(c: Dictionary) -> bool:
-			return int(c.get("st", 0)) == Rules.S_FORAGE and c.act == Rules.A_INDUCE and Rules.C_AGE_ABOVE in [c.c1, c.c2])
+			return int(c.get("st", 0)) == Rules.S_FORAGE and c.act == Rules.A_INDUCE and _has(c, Rules.C_AGE_ABOVE))
 	if w == "c2_immune":
 		var k2 := _forage_card(1)
 		return d != null and k2 >= 0 and Rules.C_IMMUNE in [d.deck_editor.deck[k2].c1, d.deck_editor.deck[k2].c2]
@@ -796,7 +797,7 @@ func _met(w: String) -> bool:
 		return d != null and d.deck_editor.states_used().has(Rules.S_ALERT)
 	if w == "to_alert":
 		return d != null and d.deck_editor.deck.any(func(c: Dictionary) -> bool:
-			return int(c.get("st", 0)) == Rules.S_FORAGE and c.act == Rules.A_TO_ALERT and Rules.C_PREDATOR_NEAR in [c.c1, c.c2])
+			return int(c.get("st", 0)) == Rules.S_FORAGE and c.act == Rules.A_TO_ALERT and _has(c, Rules.C_PREDATOR_NEAR))
 	if w == "alert_far":
 		return d != null and d.deck_editor.deck.any(func(c: Dictionary) -> bool:
 			return int(c.get("st", 0)) == Rules.S_FORAGE and c.act == Rules.A_TO_ALERT and c.c1 == Rules.C_PREDATOR_NEAR and float(c.t1) >= 75.0)
@@ -805,7 +806,7 @@ func _met(w: String) -> bool:
 		return d != null and d.organs.has("gland") and d.organs.has("chemo_rec")
 	if w == "shout":
 		return d != null and d.deck_editor.deck.any(func(c: Dictionary) -> bool:
-			return int(c.get("st", 0)) == Rules.S_FORAGE and c.act == Rules.A_EMIT_A and Rules.C_PREDATOR_NEAR in [c.c1, c.c2])
+			return int(c.get("st", 0)) == Rules.S_FORAGE and c.act == Rules.A_EMIT_A and _has(c, Rules.C_PREDATOR_NEAR))
 	if w == "smell_flee":
 		if d == null:
 			return false
@@ -835,23 +836,37 @@ func _met(w: String) -> bool:
 		return d != null and d.deck_editor.states_used().has(Rules.S_BREED)
 	if w == "to_breed":
 		return d != null and d.deck_editor.deck.any(func(c: Dictionary) -> bool:
-			return int(c.get("st", 0)) == Rules.S_FORAGE and c.act == Rules.A_TO_BREED and Rules.C_ENERGY_ABOVE in [c.c1, c.c2])
+			return int(c.get("st", 0)) == Rules.S_FORAGE and c.act == Rules.A_TO_BREED and _has(c, Rules.C_ENERGY_ABOVE))
 	if w == "calm":
 		return d != null and d.deck_editor.deck.any(func(c: Dictionary) -> bool:
 			return int(c.get("st", 0)) == Rules.S_ALERT and c.act == Rules.A_TO_FORAGE and c.c1 == Rules.C_STATE_TIME and float(c.t1) <= 14.0)
 	# Chapter 6.
+	# Chapter 7/8 cards, one at a time (2026-11-07: precise steps), and their
+	# place above the eating card.
+	if w.begins_with("card:"):
+		var want: Array = {
+			remember = [Rules.A_REMEMBER, Rules.C_TEMP_BAD, true],
+			ret = [Rules.A_RETURN, Rules.C_TEMP_BAD, false],
+			up = [Rules.A_SEEK_O2, Rules.C_O2_ABOVE, true],
+			swallow = [Rules.A_SWALLOW, Rules.C_SYMB, true],
+			toxA = [Rules.A_TOXIN_A, Rules.C_RIVAL_NEAR, false],
+			toxB = [Rules.A_TOXIN_B, Rules.C_RIVAL_NEAR, false],
+		}.get(w.substr(5), [])
+		return not want.is_empty() and _any_card(func(c: Dictionary) -> bool: return c.act == int(want[0]) and _has(c, int(want[1]), bool(want[2])))
+	if w.begins_with("before_eat:"):
+		return d != null and Array(w.substr(11).split(",")).all(func(n: String) -> bool: return _before_eat(int(ACT_NAMES.get(n, -1))))
 	if w == "up_card":
-		return d != null and d.deck_editor.deck.any(func(c: Dictionary) -> bool: return c.act == Rules.A_SEEK_O2)
+		return _any_card(func(c: Dictionary) -> bool: return c.act == Rules.A_SEEK_O2 and _has(c, Rules.C_O2_ABOVE, true))
 	if w == "swallow_card":
-		return d != null and d.deck_editor.deck.any(func(c: Dictionary) -> bool: return c.act == Rules.A_SWALLOW)
+		return _any_card(func(c: Dictionary) -> bool: return c.act == Rules.A_SWALLOW and _has(c, Rules.C_SYMB, true))
 	if w == "toxin_cards":
-		return d != null and d.deck_editor.deck.any(func(c: Dictionary) -> bool: return c.act == Rules.A_TOXIN_A) and d.deck_editor.deck.any(func(c: Dictionary) -> bool: return c.act == Rules.A_TOXIN_B)
+		return _any_card(func(c: Dictionary) -> bool: return c.act == Rules.A_TOXIN_A and _has(c, Rules.C_RIVAL_NEAR)) and _any_card(func(c: Dictionary) -> bool: return c.act == Rules.A_TOXIN_B and _has(c, Rules.C_RIVAL_NEAR))
 	if w == "toxin_card":
-		return d != null and d.deck_editor.deck.any(func(c: Dictionary) -> bool: return c.act == Rules.A_TOXIN_A or c.act == Rules.A_TOXIN_B)
+		return _any_card(func(c: Dictionary) -> bool: return (c.act == Rules.A_TOXIN_A or c.act == Rules.A_TOXIN_B) and _has(c, Rules.C_RIVAL_NEAR))
 	if w == "acid_up":
 		return d != null and d.acid_tol >= 0.4
 	if w == "home_cards":
-		return d != null and d.deck_editor.deck.any(func(c: Dictionary) -> bool: return c.act == Rules.A_REMEMBER) and d.deck_editor.deck.any(func(c: Dictionary) -> bool: return c.act == Rules.A_RETURN)
+		return _any_card(func(c: Dictionary) -> bool: return c.act == Rules.A_REMEMBER and _has(c, Rules.C_TEMP_BAD, true)) and _any_card(func(c: Dictionary) -> bool: return c.act == Rules.A_RETURN and _has(c, Rules.C_TEMP_BAD))
 	if w == "spore_state":
 		return d != null and d.deck_editor.states_used().has(Rules.S_SPORE)
 	if w == "life_up":
@@ -863,7 +878,7 @@ func _met(w: String) -> bool:
 	if w == "fert4":
 		return d != null and float(d.genes[4]) >= 4.0
 	if w == "avoid_o2_card":
-		return d != null and d.deck_editor.deck.any(func(c: Dictionary) -> bool: return c.act == Rules.A_AVOID_O2 and Rules.C_O2_ABOVE in [c.c1, c.c2])
+		return _any_card(func(c: Dictionary) -> bool: return c.act == Rules.A_AVOID_O2 and _has(c, Rules.C_O2_ABOVE))
 	if w == "avoid_first":
 		return d != null and _forage_card(0) >= 0 and d.deck_editor.deck[_forage_card(0)].act == Rules.A_AVOID_O2
 	if w == "resp_aero":
@@ -883,6 +898,39 @@ func _met(w: String) -> bool:
 	if w.begins_with("used2:"):
 		return int(host.iv.used.get(w.substr(6), 0)) > 1
 	return false
+
+
+# Actions by name, for the guide's step data (handle:X, before_eat:X).
+const ACT_NAMES := {REMEMBER = Rules.A_REMEMBER, RETURN = Rules.A_RETURN, SEEK_O2 = Rules.A_SEEK_O2, SWALLOW = Rules.A_SWALLOW, TOXIN_A = Rules.A_TOXIN_A, TOXIN_B = Rules.A_TOXIN_B, AVOID_O2 = Rules.A_AVOID_O2}
+
+
+# A foraging card with action `act` above the first card that eats (or fires
+# always): the deck reaches it.
+func _before_eat(act: int) -> bool:
+	var d: Control = host.designer
+	if d == null or act < 0:
+		return false
+	var mine := -1
+	var eat := -1
+	for k in d.deck_editor.deck.size():
+		var c: Dictionary = d.deck_editor.deck[k]
+		if int(c.get("st", 0)) != Rules.S_FORAGE:
+			continue
+		if mine < 0 and c.act == act:
+			mine = k
+		if eat < 0 and (c.act == Rules.A_SEEK_ALGAE or (c.c1 == Rules.C_NONE and c.c2 == Rules.C_NONE and c.act != act)):
+			eat = k
+	return mine >= 0 and (eat < 0 or mine < eat)
+
+
+# Card `c` has condition `cond`, negated (不) or not as `neg` says.
+static func _has(c: Dictionary, cond: int, neg := false) -> bool:
+	return (c.c1 == cond and bool(c.get("n1", false)) == neg) or (c.c2 == cond and bool(c.get("n2", false)) == neg)
+
+
+func _any_card(test: Callable) -> bool:
+	var d: Control = host.designer
+	return d != null and d.deck_editor.deck.any(test)
 
 
 # The foraging cards in order: the deck index of the n-th (from 0), or -1.
@@ -1194,6 +1242,12 @@ func _ring_rect(key: String) -> Rect2:
 		return d.mode_adv.get_global_rect() if d.mode_adv.is_visible_in_tree() else Rect2()
 	if key == "mode_adv" and d:
 		c = d.mode_adv if d.page == "rules" else d.tab_buttons["rules"]
+	# The ⋮⋮ handle of the card with action X (chapters 7, 8).
+	if key.begins_with("handle:") and d:
+		if d.page != "rules":
+			c = d.tab_buttons["rules"]
+		else:
+			return _card_part(_card_of(int(ACT_NAMES.get(key.substr(7), -1))), "handle").grow(4.0)
 	if key.begins_with("persona:") and d:
 		if d.page != "rules":
 			c = d.tab_buttons["rules"]

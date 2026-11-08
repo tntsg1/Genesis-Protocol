@@ -344,8 +344,11 @@ const MENU_RELEASE_SPOT := Vector2(-150, 60) # from DISH_CENTER
 var _before_dive := {}
 
 
-func open_designer() -> void:
+# `page`: open on that page (the sandbox's 投放病毒 opens the virus page).
+func open_designer(page := "") -> void:
 	if designer:
+		if page != "":
+			designer.show_page(page)
 		return
 	if level_runner and level_runner.phase != "design":
 		hud_root.notify("本次实验已经投放；想改方案，等结算后点“改方案再试”", Ui.WARN)
@@ -375,6 +378,12 @@ func open_designer() -> void:
 	Audio.music("lab")
 	Audio.sfx("dive")
 	designer.setup(reference, view * 0.5, nucleus_r)
+	if page != "":
+		var dz: Control = designer
+		dz.intro_done.connect(func() -> void:
+			dz.show_page(page)
+			if page == "virus":
+				dz._toast("在这里设计病毒：调好四项、选好「感染谁」，再点「用这种病毒」，回培养皿按 5 投放。"), CONNECT_ONE_SHOT)
 	designer.released.connect(begin_release)
 	designer.pull_out.connect(_pull_out)
 	designer.closed.connect(func() -> void:
