@@ -40,6 +40,16 @@ var undo: Array = [] # [{before, after, paint}]
 var redo: Array = []
 var applied := {} # what the sim was last given (only changes are re-sent)
 var events: Array = []
+# The designed virus (投放病毒 drops it) and its host; whether the colony
+# rules have been given to the sim (the first multicell release).
+var virus := {}
+var virus_host := -1
+var colony_on := false
+# The sandbox's multicell rules: still water, no grit, the regenerating
+# body of level 23 open (every block kind).
+const COLONY := {stream = Vector2.ZERO, grit = 0, grit_speed = 1.6, gest = 25.0, wait = 8.0, child = 0.9,
+	store_e = 350.0, armor = 0.04, bite_e = 100.0, bite_gap = 3.0, kinds = [1, 6, 7, 8, 9], tune = {burn = 2.4}, specimen = "SANDBOX",
+	hurt = 1.0, crack = 0.34, regrow = 180.0, regen = 12.0, regen_all = true, regrow_e = 15.0, bleed = 14.0}
 var fired := {}
 var _t0 := 0.0
 var _last := 0.0
@@ -128,6 +138,40 @@ func reset() -> void:
 	redo.clear()
 	events.clear()
 	fired.clear()
+	virus = {}
+	virus_host = -1
+	colony_on = false
+
+
+# A new dish forgets the virus and the colony rules (load_world).
+func world_reset() -> void:
+	virus = {}
+	virus_host = -1
+	colony_on = false
+
+
+# The designer's virus page: this design, infecting species `sp`.
+func set_virus(v: Dictionary, sp: int) -> void:
+	virus = v.duplicate()
+	virus_host = sp
+	var ph := {"host": sp, "rain": 0.0, "rain_from": 0.0, "virophage": false}
+	ph.merge(LevelEval.virus_params(v), true)
+	host.sim.set_phage(ph)
+	host.phage_layer.set_look(v, false)
+	host.giant_layer.takeover = float(ph.burst)
+	host.zoom_max = maxf(host.zoom_max, 26.0)
+
+
+# A multicell species released: its body as colony parameters, the rules
+# given to the sim once.
+func colony_params(params: Dictionary) -> Dictionary:
+	if not colony_on:
+		host.sim.set_colony(COLONY)
+		colony_on = true
+		host.zoom_max = maxf(host.zoom_max, 20.0)
+	var p := params.duplicate()
+	p.merge(Colony.params(params.blocks, COLONY.tune), true)
+	return p
 
 
 # --- editing -------------------------------------------------------------------

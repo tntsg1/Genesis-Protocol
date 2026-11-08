@@ -130,6 +130,13 @@ var pages := {}
 var virus_bench: Control # level 18
 const VirusBench := preload("res://scripts/ui/virus_bench.gd")
 var body_bench: Control # level 21
+# The sandbox (DECISIONS 沙盒补全 Q277): the virus and body pages are there
+# too; the body only counts with 多细胞 on, the virus goes to the dish with
+# its target picked.
+static var multicell := false
+static var virus_target := -1
+var multi_pill: Widgets.Pill
+const SANDBOX_VIRUS := {burst = 3, speed = 3, shell = 3, stick = 3, temperate = false}
 const BodyBench := preload("res://scripts/ui/body_bench.gd")
 var page := "genome"
 var tab_buttons := {}
@@ -394,10 +401,10 @@ func _build_top() -> void:
 		_spacer(h)
 	var rules_tab := "行为预设  2" if str(level_rules.get("id", "")) == "1-1" else "行为规则  2"
 	var tab_specs: Array = [["genome", "基因组  1"], ["rules", rules_tab], ["library", "物种库  3"], ["handbook", "规则手册  4"]]
-	if level_rules.has("virus"):
-		tab_specs.insert(0, ["virus", "病毒设计"])
-	if level_rules.has("colony"):
-		tab_specs.insert(0, ["body", "身体"])
+	if level_rules.has("virus") or level_rules.is_empty():
+		tab_specs.insert(0 if not level_rules.is_empty() else tab_specs.size(), ["virus", "病毒设计"])
+	if level_rules.has("colony") or level_rules.is_empty():
+		tab_specs.insert(0 if not level_rules.is_empty() else tab_specs.size(), ["body", "身体"])
 	for spec in tab_specs:
 		var b := Widgets.Pill.new(spec[1], 116, Ui.sans(600))
 		var key: String = spec[0]
@@ -431,7 +438,8 @@ func _build_top() -> void:
 # design stays where it was, on the other pages.
 func _build_body_page() -> void:
 	pages.body = []
-	if not level_rules.has("colony"):
+	var sandbox := level_rules.is_empty()
+	if not level_rules.has("colony") and not sandbox:
 		return
 	var p := _panel(120, 110, 1800, 930, Vector4(30, 22, 30, 22))
 	pages.body = [p]
@@ -439,15 +447,19 @@ func _build_body_page() -> void:
 	body_bench.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	body_bench.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	p.body.add_child(body_bench)
-	body_bench.setup(level_rules.get("design", {}).get("blocks", []), level_rules.colony, int(level_rules.get("star_blocks", 0)), float(level_rules.get("trip", 660.0)))
+	body_bench.setup(level_rules.get("design", {}).get("blocks", []), level_rules.get("colony", SandboxWorld.COLONY), int(level_rules.get("star_blocks", 0)), float(level_rules.get("trip", 660.0)))
 	body_bench.changed.connect(_refresh)
+	if sandbox:
+		p.visible = false # (the genome page comes first; the body page is a tab)
+		return
 	show_page.call_deferred("body")
 
 
 # Level 18: the virus bench is the page; the cells are given.
 func _build_virus_page() -> void:
 	pages.virus = []
-	if not level_rules.has("virus"):
+	var sandbox := level_rules.is_empty()
+	if not level_rules.has("virus") and not sandbox:
 		return
 	var p := _panel(200, 110, 1720, 930, Vector4(36, 26, 36, 26))
 	pages.virus = [p]
@@ -455,7 +467,11 @@ func _build_virus_page() -> void:
 	virus_bench.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	virus_bench.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	p.body.add_child(virus_bench)
-	virus_bench.setup(level_rules.virus, level_rules.get("virophage", false))
+	virus_bench.setup(level_rules.get("virus", SANDBOX_VIRUS), level_rules.get("virophage", false))
+	if sandbox:
+		p.visible = false
+		_virus_target_row((virus_bench.get_child(0) as Control).get_child(0) as Control)
+		return
 	show_page.call_deferred("virus")
 	if (level_rules.pages_open as Array).size() > 1:
 		return # (level 19: the cells are the player's too)
@@ -1717,7 +1733,7 @@ func apply_reference() -> void:
 func _design() -> Dictionary:
 	return {name = name_edit.text.strip_edges() if name_edit.text.strip_edges() != "" else "未命名物种",
 		color = color, genes = genes.duplicate(), deck = deck_editor.deck.duplicate(true), temp_opt = temp_opt, mutates = mutates, resp = resp, life = life, euk = euk, acid_tol = acid_tol,
-		organs = organs.duplicate(), persona = persona, bold = bold, blocks = body_bench.cells.duplicate(true) if body_bench else []}
+		organs = organs.duplicate(), persona = persona, bold = bold, blocks = body_bench.cells.duplicate(true) if body_bench and body_counts() else []}
 
 
 # A switch a level opens (resp_open, life_open, euk_open, acid_open); the
@@ -1850,7 +1866,7 @@ func _build_footer() -> void:
 	toast.visible = false
 	msg.add_child(toast)
 	# Natural mutation on / off: off makes a control for "does mutation help?".
-	mutate_pill = Widgets.Pill.new("", 150, Ui.sans(600))
+	mutate_pill = Widgets.Pill.new("", 136, Ui.sans(600))
 	mutate_pill.custom_minimum_size.y = 44
 	mutate_pill.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 	mutate_pill.tooltip_text = "开：后代会随机突变（基因、最适水温、规则卡）
@@ -1858,7 +1874,7 @@ func _build_footer() -> void:
 	mutate_pill.pressed.connect(func() -> void: _set_mutates(not mutates))
 	h.add_child(mutate_pill)
 	_set_mutates(mutates)
-	resp_pill = Widgets.Pill.new("", 150, Ui.sans(600))
+	resp_pill = Widgets.Pill.new("", 124, Ui.sans(600))
 	resp_pill.custom_minimum_size.y = 44
 	resp_pill.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 	resp_pill.pressed.connect(func() -> void:
@@ -1866,7 +1882,19 @@ func _build_footer() -> void:
 		_toast("呼吸方式：%s。%s" % [Resp.name_of(resp), Resp.LIST[resp][2]]))
 	h.add_child(resp_pill)
 	_set_resp(resp)
-	euk_pill = Widgets.Pill.new("", 150, Ui.sans(600))
+	# The sandbox: whether the body page's blocks make the species.
+	if level_rules.is_empty():
+		multi_pill = Widgets.Pill.new("", 112, Ui.sans(600))
+		multi_pill.custom_minimum_size.y = 44
+		multi_pill.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+		multi_pill.tooltip_text = "开：投放的是在「身体」页用方块拼成的多细胞生物（团藻那样）；关：单细胞"
+		multi_pill.pressed.connect(func() -> void:
+			multicell = not multicell
+			_sync_multi()
+			_refresh()
+			_toast("多细胞：开。去「身体」页拼它的身体。" if multicell else "多细胞：关，投放单细胞。"))
+		h.add_child(multi_pill)
+	euk_pill = Widgets.Pill.new("", 124, Ui.sans(600))
 	euk_pill.custom_minimum_size.y = 44
 	euk_pill.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 	euk_pill.tooltip_text = "带共生菌（真核）：一出生体内就有紫光游丝。有氧时产能大增，但更大、更慢、更耗能，没氧的地方反而吃亏"
@@ -1875,6 +1903,7 @@ func _build_footer() -> void:
 		_toast("真核：带着共生菌出生，有氧时产能大增，但更大更慢。" if euk else "真核：不带共生菌。"))
 	h.add_child(euk_pill)
 	_set_euk(euk)
+	_sync_multi()
 	var save_b := Widgets.Pill.new("保存到物种库", 140, Ui.sans(600))
 	save_b.custom_minimum_size.y = 44
 	save_b.size_flags_vertical = Control.SIZE_SHRINK_CENTER
@@ -1935,7 +1964,7 @@ func _refresh() -> void:
 			go_hint.text = "规则卡超出 %d 张，请删除部分规则卡或提高神经等级。" % (n_cards - slots_now)
 		elif level_rules.has("star_shots"):
 			go_hint.text = "第三颗星看投放次数，不看基因预算"
-		elif body_bench:
+		elif body_bench and not level_rules.is_empty():
 			var extra: int = body_bench.cells.size() - int(level_rules.star_blocks)
 			go_hint.text = "✓ 身体在 %d 块以内" % int(level_rules.star_blocks) if extra <= 0 else "第三颗星：身体再少 %d 块（可以先过关）" % extra
 			go_hint.add_theme_color_override("font_color", Ui.INK_SOFT)
@@ -1967,7 +1996,7 @@ func _refresh() -> void:
 	cost_labels["divide"].set_value(r * r * (2.6 - 0.22 * genes[4]) + 0.6 * r * r)
 	cost_labels["speed"].set_value((18.0 + 14.0 * genes[0]) * (1.0 - 0.04 * genes[2]))
 	cost_labels["sight"].set_value(30.0 + 24.0 * genes[1])
-	if body_bench:
+	if body_bench and body_counts():
 		var bs: Dictionary = Colony.stats(body_bench.cells)
 		cost_labels["divide"].set_value(bs.energy)
 		cost_labels["speed"].set_value(bs.speed)
@@ -2152,7 +2181,7 @@ func _update_genome() -> void:
 	# Chromosomes ride inside it, then glide into the tank, where the cell's
 	# own nucleus gathers round them.
 	var big := minf(r * 0.9, DIVE_NUCLEUS)
-	genome.visible = (virus_bench == null and body_bench == null) or (page == "genome" and (level_rules.pages_open as Array).size() > 1)
+	genome.visible = (virus_bench == null and body_bench == null) or (page == "genome" and (level_rules.is_empty() or (level_rules.pages_open as Array).size() > 1))
 	genome.position = mid.lerp(_nucleus_center(), morph)
 	genome.scale = Vector2.ONE * (lerpf(big, NUCLEUS_R, morph) / GenomeView.BASE_R)
 	genome.modulate.a = _ease((r - dive_r0 * 1.5) / 30.0)
@@ -2322,6 +2351,52 @@ func release() -> void:
 	if virus_bench:
 		params.virus = virus_bench.virus.duplicate()
 	_leave(params)
+
+
+# The body bench's blocks make the species (a level with one; the sandbox
+# with 多细胞 on).
+func body_counts() -> bool:
+	return not level_rules.is_empty() or multicell
+
+
+func _sync_multi() -> void:
+	if multi_pill:
+		multi_pill.text = "多细胞：开" if multicell else "多细胞：关"
+		multi_pill.active = multicell
+
+
+# The sandbox's virus page: which species in the dish it infects, and a
+# button that hands the design to 投放病毒 (key 5).
+func _virus_target_row(p: Control) -> void:
+	var host: Node = get_tree().current_scene if is_inside_tree() else null
+	p.add_child(Ui.label("感染谁（沙盒）", 15, Ui.INK, Ui.sans(600)))
+	var row := HFlowContainer.new()
+	row.add_theme_constant_override("h_separation", 8)
+	row.add_theme_constant_override("v_separation", 8)
+	p.add_child(row)
+	var picks: Array = []
+	var labels: Array = host.get("labels") if host and host.get("labels") != null else []
+	for k in labels.size():
+		var b := Widgets.Pill.new(str(labels[k]), 0, Ui.sans(500))
+		b.custom_minimum_size = Vector2(Ui.sans(500).get_string_size(str(labels[k]), HORIZONTAL_ALIGNMENT_LEFT, -1, 13).x + 26, 32)
+		b.active = k == virus_target
+		var idx := k
+		b.pressed.connect(func() -> void:
+			virus_target = idx
+			for j in picks.size():
+				(picks[j] as Widgets.Pill).active = j == idx)
+		picks.append(b)
+		row.add_child(b)
+	var apply := Widgets.Pill.new("用这种病毒（投放病毒 5）", 0, Ui.sans(600))
+	apply.custom_minimum_size = Vector2(230, 32)
+	apply.active = true
+	apply.pressed.connect(func() -> void:
+		if virus_target < 0 or virus_target >= labels.size():
+			_toast("先选它感染哪个物种。")
+			return
+		host.sandbox_world.set_virus(virus_bench.virus.duplicate(), virus_target)
+		_toast("已设好：按 5 在培养皿里投放这种病毒，它只感染「%s」。" % str(labels[virus_target])))
+	p.add_child(apply)
 
 
 # Species parameters for SimCore from a design: organs shape the body;

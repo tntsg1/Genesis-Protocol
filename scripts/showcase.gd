@@ -253,6 +253,7 @@ func load_world(cfg: Dictionary, world_seed := -1) -> void:
 	phage_layer.set_look({})
 	sim = SimCore.new()
 	sim.setup(WORLD, seed)
+	sandbox_world.world_reset()
 	sim.set_dish(DISH_CENTER, DISH_RADIUS)
 	colors.clear()
 	labels.clear()
@@ -1290,6 +1291,9 @@ func begin_release(params: Dictionary) -> void:
 	if level_runner and level_runner.phase == "design":
 		level_runner.on_design(params) # a prediction first, then the level's spot
 		return
+	# The sandbox: a body from the body page makes a multicell species.
+	if level_runner == null and (params.get("blocks", []) as Array).size() >= Colony.MIN_BLOCKS:
+		params = sandbox_world.colony_params(params)
 	release_params = params
 	if in_menu:
 		# The pull-out already brought the camera over the landing spot.
@@ -1316,7 +1320,7 @@ var capsule := {}
 
 
 func _do_release(pos: Vector2) -> void:
-	var n := release_count
+	var n := release_count if not release_params.get("colony", false) else mini(release_count, 8) # (a multicell body is big: a few)
 	var spots := PackedVector2Array()
 	var rr := RELEASE_RADIUS * 0.74
 	for k in n:
