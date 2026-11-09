@@ -294,6 +294,14 @@ func _build_body() -> void:
 	foot.add_child(back)
 	# Diagnostic teaching: two misses in a row on a level, the step-by-step
 	# guide is offered (it never comes uninvited past chapter 1).
+	# The recommended values, from the second miss on (DECISIONS 推荐数值).
+	if not got[0] and int(CampaignSave.level(level.id).get("attempts", 1)) >= 2 and not Recommend.for_level(level.id).is_empty() and not (runner.design.get("params", {}) as Dictionary).has("extra"):
+		var rb := Widgets.Pill.new("用推荐数值再试一次", 0, Ui.sans(600))
+		rb.custom_minimum_size = Vector2(190, 40)
+		var rr := Recommend.for_level(level.id)
+		rb.tooltip_text = "推荐数值：%s（机器人用这组 %d 局过 %d 局）。规则卡和器官不变。" % [Recommend.text(level), int(rr.wins), int(rr.seeds)]
+		rb.pressed.connect(func() -> void: action.emit("retry_rec", null))
+		foot.add_child(rb)
 	if not got[0] and level.get("tutorial", false) and not Levels.guided(level) and int(CampaignSave.level(level.id).get("attempts", 1)) >= 2:
 		var guide := Widgets.Pill.new("跟着引导再试一次", 0, Ui.sans(600))
 		guide.custom_minimum_size = Vector2(170, 40)

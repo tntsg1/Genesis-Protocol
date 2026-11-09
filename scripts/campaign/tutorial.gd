@@ -485,6 +485,12 @@ func _ready() -> void:
 	skip_step.custom_minimum_size = Vector2(110, 30)
 	skip_step.pressed.connect(_next)
 	row.add_child(skip_step)
+	# A recommended-value step: all of them at once (DECISIONS 推荐数值).
+	apply_rec = Widgets.Pill.new("一键套用推荐数值", 0, Ui.sans(600))
+	apply_rec.custom_minimum_size = Vector2(150, 30)
+	apply_rec.visible = false
+	apply_rec.pressed.connect(_apply_rec)
+	row.add_child(apply_rec)
 	next = Widgets.Pill.new("知道了", 0, Ui.sans(600))
 	next.custom_minimum_size = Vector2(90, 30)
 	next.active = true
@@ -501,6 +507,8 @@ func _ready() -> void:
 
 
 var lines: Array = []
+var apply_rec: Widgets.Pill
+var auto_done: Array = [] # steps passed over because the design already had them (said on the next one shown)
 
 
 func _show(key: String) -> void:
@@ -520,6 +528,14 @@ func _show(key: String) -> void:
 		if n > 0:
 			resumed = true
 			lines = lines.slice(mini(n, lines.size()))
+	# 跟着引导再试一次 (or the guide asked for again): before the release, the
+	# recommended values, one gene a step (DECISIONS 推荐数值).
+	if key == "design" and runner.want_guide and not Recommend.for_level(runner.level.id).is_empty():
+		var at_go := lines.size()
+		for k in lines.size():
+			if lines[k] is Dictionary and str(lines[k].get("wait", "")) == "release":
+				at_go = k
+		lines.insert(at_go, {rec = true})
 	_next()
 
 
@@ -560,11 +576,19 @@ func _next() -> void:
 				CampaignSave.set_guide_second(runner.level.id)
 		return
 	var l: Variant = lines.pop_front()
+	if l is Dictionary and l.has("rec"):
+		var steps := _rec_steps()
+		for k in range(steps.size() - 1, -1, -1):
+			lines.push_front(steps[k])
+		_next()
+		return
 	cur = l if l is Dictionary else {text = l}
 	var at := _total() - lines.size() # this line's number, from 1
 	CampaignSave.set_guide_at(runner.level.id, step, at - 1)
 	# Already done (the player got there first): straight on.
 	if cur.has("wait") and _met(cur.wait):
+		if str(cur.wait) != "release" and not cur.has("rec_step"):
+			auto_done.append(str(cur.get("goal", cur.get("text", ""))).trim_suffix("。"))
 		_next()
 		return
 	# A step may pre-select a card (by its action), so “+ 添加规则” puts the
@@ -578,7 +602,13 @@ func _next() -> void:
 			de.queue_redraw()
 	count_label.text = ("继续上次引导　" if resumed else "") + "第 %d / %d 步" % [at, _total()]
 	resumed = false
-	_say(Keys.fill(str(_v("text", ""))))
+	# (Steps the design already met: say so, not "设置好了" out of nowhere.)
+	var said := Keys.fill(str(_v("text", "")))
+	if not auto_done.is_empty():
+		said = "这几步你的方案里已经有了：%s。\n\n" % "；".join(auto_done) + said
+		auto_done.clear()
+	_say(said)
+	apply_rec.visible = cur.has("rec_step")
 	wait_base = host.steps_taken
 	var waits: bool = cur.has("wait")
 	next.visible = not waits
@@ -843,6 +873,9 @@ func _met(w: String) -> bool:
 	# Chapter 6.
 	# Chapter 7/8 cards, one at a time (2026-11-07: precise steps), and their
 	# place above the eating card.
+	if w.begins_with("gene:"):
+		var gp := w.split(":")
+		return d != null and absf(float(d.genes[int(gp[1])]) - float(gp[2])) < 0.01
 	if w.begins_with("card:"):
 		var want: Array = {
 			remember = [Rules.A_REMEMBER, Rules.C_TEMP_BAD, true],
@@ -921,6 +954,45 @@ func _before_eat(act: int) -> bool:
 		if eat < 0 and (c.act == Rules.A_SEEK_ALGAE or (c.c1 == Rules.C_NONE and c.c2 == Rules.C_NONE and c.act != act)):
 			eat = k
 	return mine >= 0 and (eat < 0 or mine < eat)
+
+
+# The recommended values as steps, one per gene that differs now.
+func _rec_steps() -> Array:
+	var d: Control = host.designer
+	var l: Dictionary = runner.level
+	var r := Recommend.for_level(l.id)
+	if d == null or r.is_empty():
+		return []
+	var df := Recommend.diffs(l, d.genes)
+	if df.is_empty():
+		return [{text = "你的基因已经是推荐数值了（%s；机器人用它 %d 局过 %d 局）。" % [Recommend.text(l), int(r.wins), int(r.seeds)]}]
+	var out := []
+	var n := 0
+	for e: Array in df:
+		n += 1
+		var name: String = Recommend.GENE_NAMES[int(e[0])]
+		var head := "推荐数值（机器人用这组 %d 局过 %d 局）：%s\n\n" % [int(r.wins), int(r.seeds), Recommend.text(l)] if n == 1 else ""
+		out.append({text = head + "把「%s」调到 %s 级（现在 %s 级）。" % [name, Recommend._lv(float(e[2])), Recommend._lv(float(e[1]))], ring = "gene:%d" % int(e[0]),
+			wait = "gene:%d:%s" % [int(e[0]), str(float(e[2]))], goal = "「%s」调到 %s 级" % [name, Recommend._lv(float(e[2]))], rec_step = true})
+	return out
+
+
+# 一键套用: every recommended gene at once (the player stays in charge).
+func _apply_rec() -> void:
+	var d: Control = host.designer
+	var r := Recommend.for_level(runner.level.id)
+	if d == null or r.is_empty():
+		return
+	var g: Array = d.genes.duplicate()
+	for k: int in runner.level.get("genes_open", range(8)):
+		g[k] = float(r.genes[k])
+	d._set_genes(g)
+	if d.page != "genome":
+		d.show_page("genome")
+	# The remaining recommended steps are met now: past them.
+	while not lines.is_empty() and lines[0] is Dictionary and lines[0].has("rec_step"):
+		lines.pop_front()
+	_next()
 
 
 # Card `c` has condition `cond`, negated (不) or not as `neg` says.
@@ -1242,6 +1314,9 @@ func _ring_rect(key: String) -> Rect2:
 		return d.mode_adv.get_global_rect() if d.mode_adv.is_visible_in_tree() else Rect2()
 	if key == "mode_adv" and d:
 		c = d.mode_adv if d.page == "rules" else d.tab_buttons["rules"]
+	# A gene's row (the recommended values).
+	if key.begins_with("gene:") and d:
+		c = d.tab_buttons["genome"] if d.page != "genome" else d.gene_rows[int(key.substr(5))]
 	# The ⋮⋮ handle of the card with action X (chapters 7, 8).
 	if key.begins_with("handle:") and d:
 		if d.page != "rules":

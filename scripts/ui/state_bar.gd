@@ -47,7 +47,7 @@ func _gui_input(e: InputEvent) -> void:
 			ed.remove_state(st)
 			toast.call("已删除「%s」状态及其规则。按 Ctrl+Z 撤销。" % Rules.STATES[st][0])
 			return
-	for st in 4:
+	for st in Rules.STATES.size(): # (all five: the spore state is the fifth, chapter 7)
 		if not _shown(st) or _center(st).distance_to(e.position) >= R + 6.0:
 			continue
 		var used: Array = ed.states_used()

@@ -891,6 +891,17 @@ func _on_report_action(what: String, arg: Variant) -> void:
 		return
 	_close_report()
 	match what:
+		"retry_rec":
+			# The same design with the recommended genes (DECISIONS 推荐数值).
+			report = null
+			host.paused = false
+			var dd: Dictionary = (design.design as Dictionary).duplicate(true)
+			var rec := Recommend.for_level(level.id)
+			var g: Array = (dd.genes as Array).duplicate()
+			for k: int in level.get("genes_open", range(8)):
+				g[k] = float(rec.genes[k])
+			dd.genes = g
+			start(level, dd)
 		"retry_guide":
 			report = null
 			host.paused = false

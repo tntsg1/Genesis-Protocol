@@ -11,6 +11,7 @@ extends SceneTree
 var scene: Node2D
 var problems: Array = []
 var lines: Array = []
+var designs := {} # level id -> the design the guide ends on
 
 
 func _initialize() -> void:
@@ -86,6 +87,23 @@ func _organ(id: String) -> void:
 	d._set_organs(o.slice(maxi(0, o.size() - maxi(1, d.organ_slots())), o.size()))
 
 
+# A state added the way a player does: a click on its circle in the map.
+func _click_state(st: int) -> void:
+	var d: Control = scene.designer
+	if d.page != "rules":
+		d.show_page("rules")
+		await create_timer(0.4).timeout
+	if d.rules_mode != "advanced":
+		d.set_rules_mode("advanced")
+		await create_timer(0.3).timeout
+	var bar: Control = d.state_bar
+	var e := InputEventMouseButton.new()
+	e.button_index = MOUSE_BUTTON_LEFT
+	e.pressed = true
+	e.position = bar._center(st)
+	bar._gui_input(e)
+
+
 func _press_add() -> void:
 	scene.designer.add_button.pressed.emit()
 
@@ -130,13 +148,13 @@ func _do(w: String) -> bool:
 		"organs75":
 			d._set_organs(["memory", "spore"])
 		"sleep_state":
-			e.add_state(Rules.S_SLEEP)
+			await _click_state(Rules.S_SLEEP)
 		"alert_state":
-			e.add_state(Rules.S_ALERT)
+			await _click_state(Rules.S_ALERT)
 		"breed_state":
-			e.add_state(Rules.S_BREED)
+			await _click_state(Rules.S_BREED)
 		"spore_state":
-			e.add_state(Rules.S_SPORE)
+			await _click_state(Rules.S_SPORE)
 		"divide":
 			var k := _card(Rules.A_DIVIDE)
 			if d.rules_mode == "simple":
@@ -232,7 +250,7 @@ func _do(w: String) -> bool:
 				e.set_action(k2, Rules.A_RETURN)
 				e.move_card(k2, _forage(1))
 				if w == "boss_cards":
-					e.add_state(Rules.S_SPORE)
+					await _click_state(Rules.S_SPORE)
 			else:
 				for act in ([Rules.A_TOXIN_B, Rules.A_TOXIN_A] if w == "toxin_cards" else [Rules.A_TOXIN_A]):
 					_press_add()
@@ -382,6 +400,9 @@ func _advance(tut: Node, text: String) -> void:
 func _lint(id: String) -> void:
 	var d: Control = scene.designer
 	var e: Control = d.deck_editor
+	# The guided design, for tests/recommend_bot.gd to start from.
+	var g: Dictionary = d._design()
+	designs[id] = {genes = g.genes, deck = g.deck, organs = g.organs, resp = g.resp, life = g.life, euk = g.get("euk", false), acid_tol = g.get("acid_tol", 0.0), temp_opt = g.temp_opt, slots = d.sp_slots.size()}
 	for k in e.deck.size():
 		var wn: String = e.warning(k)
 		if wn != "":
@@ -406,4 +427,6 @@ func _run() -> void:
 		_say("- " + p)
 	var f := FileAccess.open(ProjectSettings.globalize_path("res://proofs/guide_audit.txt"), FileAccess.WRITE)
 	f.store_string("\n".join(lines))
+	var f2 := FileAccess.open(ProjectSettings.globalize_path("res://proofs/guide_designs.txt"), FileAccess.WRITE)
+	f2.store_string(var_to_str(designs))
 	quit()
