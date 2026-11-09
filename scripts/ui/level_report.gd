@@ -175,7 +175,7 @@ func _build_body() -> void:
 			var zero := {t = 0.0, alive = 0, births = 0, starved = 0, eaten = 0, aged = 0, temp = 0, acid = 0, o2 = 0, phage = 0}
 			var now := Diagnose.snapshot(sim, runner.eval, runner.eval.t)
 			var resp := int(runner.design.get("params", {}).get("resp", level.get("resp", 0)))
-			for r: Dictionary in Diagnose.read(level, sim, runner.eval, zero, now, resp).slice(0, 2):
+			for r: Dictionary in Diagnose.read(level, sim, runner.eval, zero, now, resp, runner.design).slice(0, 2):
 				var rl := Ui.label("·  " + str(r.text).replace("
 ", " "), 15, Ui.INK_SOFT, Ui.sans(500))
 				rl.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
@@ -292,17 +292,16 @@ func _build_body() -> void:
 	back.custom_minimum_size = Vector2(130, 40)
 	back.pressed.connect(func() -> void: action.emit("exit", null))
 	foot.add_child(back)
-	# Diagnostic teaching: two misses in a row on a level, the step-by-step
+	# Diagnostic teaching: two misses on a level, the step-by-step
 	# guide is offered (it never comes uninvited past chapter 1).
 	# The recommended values, from the second miss on (DECISIONS 推荐数值).
-	if not got[0] and int(CampaignSave.level(level.id).get("attempts", 1)) >= 2 and not Recommend.for_level(level.id).is_empty() and not (runner.design.get("params", {}) as Dictionary).has("extra"):
+	if not got[0] and CampaignSave.failures(level.id) >= 2 and not Recommend.for_level(level.id).is_empty():
 		var rb := Widgets.Pill.new("用推荐数值再试一次", 0, Ui.sans(600))
 		rb.custom_minimum_size = Vector2(190, 40)
-		var rr := Recommend.for_level(level.id)
-		rb.tooltip_text = "推荐数值：%s（机器人用这组 %d 局过 %d 局）。规则卡和器官不变。" % [Recommend.text(level), int(rr.wins), int(rr.seeds)]
+		rb.tooltip_text = Recommend.report_text(level)
 		rb.pressed.connect(func() -> void: action.emit("retry_rec", null))
 		foot.add_child(rb)
-	if not got[0] and level.get("tutorial", false) and not Levels.guided(level) and int(CampaignSave.level(level.id).get("attempts", 1)) >= 2:
+	if not got[0] and level.get("tutorial", false) and not Levels.guided(level) and CampaignSave.failures(level.id) >= 2:
 		var guide := Widgets.Pill.new("跟着引导再试一次", 0, Ui.sans(600))
 		guide.custom_minimum_size = Vector2(170, 40)
 		guide.tooltip_text = "一步步带你设置这一关的关键零件"

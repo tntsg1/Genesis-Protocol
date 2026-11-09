@@ -36,6 +36,7 @@ const ZOOM_MAX := 1.7
 const BP := 96 # base pairs a block's gene stands for
 
 var cells: Array = []
+var rec_marks: Array = [] # cells the guide's recommended body changes (Vector2i), marked on the board
 var kinds: Array = [Colony.FLAG, Colony.GERM] # the blocks this level offers
 var tiles := {} # kind -> its palette tile (the guide points at them)
 var specimen := "5-2  ·  VOLVOX"
@@ -985,6 +986,8 @@ class Board extends Control:
 
 	func _process(dt: float) -> void:
 		_grow(dt)
+		if not bench.rec_marks.is_empty():
+			overlay.queue_redraw()
 		if hover != Vector2i(-1, -1) and not get_viewport().gui_is_dragging() and not Rect2(Vector2.ZERO, size).has_point(get_local_mouse_position()):
 			hover = Vector2i(-1, -1)
 			queue_redraw()
@@ -1091,6 +1094,11 @@ class Board extends Control:
 			if born.has(at) or marks.any(func(m: Array) -> bool: return m[2] == at):
 				continue
 			overlay.draw_arc((Vector2(at) + Vector2(0.5, 0.5)) * STEP, STEP * 0.5 - 2.0, 0.0, TAU, 48, Color(GLOW, 0.65 if at == hover else 0.2), -1.0)
+		# The recommended body's changes (the guide's step): a pulsing square each.
+		var pulse := 0.55 + 0.35 * sin(float(Time.get_ticks_msec()) * 0.006)
+		for at: Vector2i in bench.rec_marks:
+			var r := Rect2(Vector2(at) * STEP + Vector2.ONE * 3.0, Vector2.ONE * (STEP - 6.0))
+			overlay.draw_rect(r, Color(ALERT, pulse), false, 2.5)
 
 
 # The body's genes as a strip under the scope: one stretch per block, front

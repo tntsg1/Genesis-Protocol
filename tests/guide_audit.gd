@@ -402,7 +402,16 @@ func _lint(id: String) -> void:
 	var e: Control = d.deck_editor
 	# The guided design, for tests/recommend_bot.gd to start from.
 	var g: Dictionary = d._design()
-	designs[id] = {genes = g.genes, deck = g.deck, organs = g.organs, resp = g.resp, life = g.life, euk = g.get("euk", false), acid_tol = g.get("acid_tol", 0.0), temp_opt = g.temp_opt, slots = d.sp_slots.size()}
+	designs[id] = {genes = g.genes, deck = g.deck, organs = g.organs, resp = g.resp, life = g.life, euk = g.get("euk", false), acid_tol = g.get("acid_tol", 0.0), temp_opt = g.temp_opt, slots = d.sp_slots.size(),
+		blocks = g.get("blocks", [])}
+	# Several species: every slot's design (the one on the bench as it is now).
+	if d.sp_slots.size() > 1:
+		var all: Array = d.sp_slots.duplicate(true)
+		all[d.cur_slot] = g
+		designs[id].slot_designs = all.map(func(s: Dictionary) -> Dictionary: return {genes = s.genes, deck = s.deck, organs = s.get("organs", []), resp = s.get("resp", 0),
+			life = s.get("life", 1.0), euk = s.get("euk", false), acid_tol = s.get("acid_tol", 0.0), temp_opt = s.get("temp_opt", 12.0)})
+	if d.get("virus_bench") and d.virus_bench:
+		designs[id].virus = d.virus_bench.virus.duplicate()
 	if d.go.disabled:
 		_bad(id, "投放按钮点不了：%s" % d.go_hint.text)
 	for k in e.deck.size():

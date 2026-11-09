@@ -611,6 +611,12 @@ func _next() -> void:
 		auto_done.clear()
 	_say(said)
 	apply_rec.visible = cur.has("rec_step")
+	if cur.has("rec_step"):
+		var kind := str(cur.get("rec_kind", "genes"))
+		apply_rec.text = {body = "一键套用推荐身体", virus = "一键套用推荐病毒"}.get(kind, "一键套用推荐数值")
+		apply_rec.tooltip_text = "将所有物种的基因调整为推荐数值。" if kind == "genes" and Recommend.slots(Recommend.for_level(runner.level.id)) > 1 else ""
+	if host.designer and host.designer.body_bench:
+		host.designer.body_bench.rec_marks = (cur.get("marks", []) as Array).duplicate()
 	wait_base = host.steps_taken
 	var waits: bool = cur.has("wait")
 	next.visible = not waits
@@ -875,6 +881,13 @@ func _met(w: String) -> bool:
 	# Chapter 6.
 	# Chapter 7/8 cards, one at a time (2026-11-07: precise steps), and their
 	# place above the eating card.
+	if w.begins_with("vtrait:"):
+		var vp := w.split(":")
+		return d != null and d.virus_bench != null and int(d.virus_bench.virus.get(vp[1], -1)) == int(vp[2])
+	if w.begins_with("vmode:"):
+		return d != null and d.virus_bench != null and bool(d.virus_bench.virus.get("temperate", false)) == (w.substr(6) == "true")
+	if w == "body_rec":
+		return d != null and d.body_bench != null and Recommend.body_diffs(Recommend.for_level(runner.level.id), d.body_bench.cells).is_empty()
 	if w.begins_with("gene:"):
 		var gp := w.split(":")
 		return d != null and absf(float(d.genes[int(gp[1])]) - float(gp[2])) < 0.01
@@ -965,34 +978,109 @@ func _rec_steps() -> Array:
 	var r := Recommend.for_level(l.id)
 	if d == null or r.is_empty():
 		return []
-	var df := Recommend.diffs(l, d.genes)
-	if df.is_empty():
-		return [{text = "你的基因已经是推荐数值了（%s；机器人用它 %d 局过 %d 局）。" % [Recommend.text(l), int(r.wins), int(r.seeds)]}]
 	var out := []
-	var n := 0
-	for e: Array in df:
-		n += 1
-		var name: String = Recommend.GENE_NAMES[int(e[0])]
-		var head := "推荐数值（机器人用这组 %d 局过 %d 局）：%s\n\n" % [int(r.wins), int(r.seeds), Recommend.text(l)] if n == 1 else ""
-		out.append({text = head + "把「%s」调到 %s 级（现在 %s 级）。" % [name, Recommend._lv(float(e[2])), Recommend._lv(float(e[1]))], ring = "gene:%d" % int(e[0]),
-			wait = "gene:%d:%s" % [int(e[0]), str(float(e[2]))], goal = "「%s」调到 %s 级" % [name, Recommend._lv(float(e[2]))], rec_step = true})
+	# The body first (5-2 … 5-5): the cells that differ, marked on the board.
+	if r.has("blocks") and d.body_bench:
+		var bd := Recommend.body_diffs(r, d.body_bench.cells)
+		if bd.is_empty():
+			out.append({text = "当前身体布局已经符合推荐设置，不需要再调整身体布局。"})
+		else:
+			var rows := []
+			var marks := []
+			for e: Array in bd:
+				rows.append("· 第 %d 行第 %d 格：将 %s 替换成 %s" % [int(e[0]), int(e[1]), Recommend.block_name(int(e[2])), Recommend.block_name(int(e[3]))])
+				marks.append(e[4])
+			out.append({text = "推荐身体布局：需要修改的位置已经在身体编辑界面中标记出来了。\n\n%s\n\n你可以点击「一键套用推荐身体」，直接完成所有修改，也可以按照标记的位置逐个调整。" % "\n\n".join(rows),
+				ring = "rec_body", wait = "body_rec", goal = "身体布局和推荐一致", rec_step = true, rec_kind = "body", marks = marks})
+	# The virus (4-4, 4-5): its way of working, then its points, lowered ones first.
+	if r.has("virus") and d.virus_bench:
+		var vb: Control = d.virus_bench
+		var vhead := ("推荐噬毒体：%s\n\n" if vb.virophage else "推荐病毒：%s\n\n") % Recommend.virus_text(r)
+		var want_t := bool(r.virus.get("temperate", false))
+		if bool(vb.virus.get("temperate", false)) != want_t:
+			var mname := "先潜伏" if want_t else "马上裂解"
+			out.append({text = vhead + "先把类型改成「%s」。" % mname, ring = "vmode:%s" % str(want_t), wait = "vmode:%s" % str(want_t),
+				goal = "类型改成「%s」" % mname, rec_step = true, rec_kind = "virus"})
+			vhead = ""
+		for e: Array in Recommend.virus_diffs(r, vb.virus):
+			var vname: String = Recommend.TRAIT_NAMES[e[0]]
+			out.append({text = vhead + ("先把" if vhead != "" else "把") + "「%s」调到 %d 级，现在是 %d 级。" % [vname, int(e[2]), int(e[1])], ring = "vtrait:%s" % e[0],
+				wait = "vtrait:%s:%d" % [e[0], int(e[2])], goal = "「%s」调到 %d 级" % [vname, int(e[2])], rec_step = true, rec_kind = "virus"})
+			vhead = ""
+	# The genes, species by species (a tab to switch to first when it is not open).
+	var n := Recommend.slots(r)
+	var head := ("身体布局调整完成后，继续按照推荐数值调整基因等级。\n\n" if r.has("blocks") else "") + ("推荐数值\n%s\n\n" % Recommend.all_text(l) if n > 1 else "推荐数值：%s\n\n" % Recommend.text(l))
+	var on := int(d.cur_slot)
+	var any_genes := false
+	for s in n:
+		var now: Array = d.genes if s == on else (d.sp_slots[s].genes if s < d.sp_slots.size() else [])
+		if now.is_empty():
+			continue
+		var df := Recommend.diffs(l, now, s)
+		if df.is_empty():
+			continue
+		any_genes = true
+		if s != on:
+			var lab: String = str(l.species[s].get("label", ""))
+			out.append({text = head + "点击上方的「%s」，继续调整%s的基因。" % [Recommend.slot_name(l, s), lab], ring = "slot:%d" % s, wait = "slot:%d" % s,
+				goal = "切换到「%s」" % Recommend.slot_name(l, s), rec_step = true, rec_kind = "genes"})
+			head = ""
+			on = s
+		for e: Array in df:
+			var gname: String = Recommend.GENE_NAMES[int(e[0])]
+			out.append({text = head + "将「%s」调至 %s 级（当前 %s 级）。" % [gname, Recommend._lv(float(e[2])), Recommend._lv(float(e[1]))], ring = "gene:%d" % int(e[0]),
+				wait = "gene:%d:%s" % [int(e[0]), str(float(e[2]))], goal = "「%s」调到 %s 级" % [gname, Recommend._lv(float(e[2]))], rec_step = true, rec_kind = "genes"})
+			head = ""
+	if not any_genes and out.is_empty():
+		out.append({text = "所有基因已调好，可以开始模拟了。"})
+	# When to drop the virus: the last word before the release.
+	if r.has("virus"):
+		if str(l.id) == "4-4":
+			out.append({text = "等到 %s 再投第一团病毒，找绒游丝最多的地方投，过 %d 秒再换个位置投第二团。\n\n太早投的话，绒游丝数量还不够，病毒很难传开。左边的诊断卡会在投放时间到了以后提醒你。" % [Recommend.clock(Recommend.first_drop(r)), Recommend.drop_gap(r)]})
+		else:
+			out.append({text = "开局 %d 秒内，往自己的细胞最多的地方投两团噬毒体。\n\n噬毒体潜伏在细胞里以后，可以随着细胞分裂传给后代。这样等巨毒囊被吞进去时，就更容易接触到噬毒体。" % Recommend.drops_within(r)})
 	return out
 
 
-# 一键套用: every recommended gene at once (the player stays in charge).
+# 一键套用: every recommended value of the step's kind at once (genes of
+# every species, the virus, or the body; the player stays in charge).
 func _apply_rec() -> void:
 	var d: Control = host.designer
-	var r := Recommend.for_level(runner.level.id)
+	var l: Dictionary = runner.level
+	var r := Recommend.for_level(l.id)
 	if d == null or r.is_empty():
 		return
-	var g: Array = d.genes.duplicate()
-	for k: int in runner.level.get("genes_open", range(8)):
-		g[k] = float(r.genes[k])
-	d._set_genes(g)
-	if d.page != "genome":
-		d.show_page("genome")
-	# The remaining recommended steps are met now: past them.
-	while not lines.is_empty() and lines[0] is Dictionary and lines[0].has("rec_step"):
+	var kind := str(cur.get("rec_kind", "genes"))
+	match kind:
+		"body":
+			if d.body_bench:
+				d.body_bench._commit((r.blocks as Array).duplicate(true))
+		"virus":
+			var vb: Control = d.virus_bench
+			if vb:
+				for k: String in Recommend.TRAITS:
+					vb.set_trait(k, 1)
+				for k: String in Recommend.TRAITS:
+					vb.set_trait(k, int(r.virus[k]))
+				if bool(vb.virus.get("temperate", false)) != bool(r.virus.get("temperate", false)):
+					vb._set_mode(bool(r.virus.get("temperate", false)))
+		_:
+			for s in Recommend.slots(r):
+				var want := Recommend.slot_genes(r, s)
+				if s == int(d.cur_slot):
+					var g: Array = d.genes.duplicate()
+					for k: int in l.get("genes_open", range(8)):
+						g[k] = float(want[k])
+					d._set_genes(g)
+				elif s < d.sp_slots.size():
+					var g2: Array = (d.sp_slots[s].genes as Array).duplicate()
+					for k: int in l.get("genes_open", range(8)):
+						g2[k] = float(want[k])
+					d.sp_slots[s].genes = g2
+			if d.page != "genome":
+				d.show_page("genome")
+	# The remaining steps of that kind are met now: past them.
+	while not lines.is_empty() and lines[0] is Dictionary and lines[0].has("rec_step") and str(lines[0].get("rec_kind", "genes")) == kind:
 		lines.pop_front()
 	_next()
 
@@ -1317,6 +1405,20 @@ func _ring_rect(key: String) -> Rect2:
 	if key == "mode_adv" and d:
 		c = d.mode_adv if d.page == "rules" else d.tab_buttons["rules"]
 	# A gene's row (the recommended values).
+	if key.begins_with("vtrait:") and d:
+		if d.page != "virus" or d.virus_bench == null:
+			c = d.tab_buttons.get("virus")
+		else:
+			var ps: Array = d.virus_bench.pips.get(key.substr(7), [])
+			if not ps.is_empty():
+				return (ps[0] as Control).get_global_rect().merge((ps[ps.size() - 1] as Control).get_global_rect()).grow(4.0)
+	if key.begins_with("vmode:") and d:
+		if d.page != "virus" or d.virus_bench == null:
+			c = d.tab_buttons.get("virus")
+		else:
+			c = d.virus_bench.mode_latent if key.substr(6) == "true" else d.virus_bench.mode_lytic
+	if key == "rec_body" and d:
+		c = d.tab_buttons.get("body") if d.page != "body" or d.body_bench == null else d.body_bench.scope
 	if key.begins_with("gene:") and d:
 		c = d.tab_buttons["genome"] if d.page != "genome" else d.gene_rows[int(key.substr(5))]
 	# The ⋮⋮ handle of the card with action X (chapters 7, 8).

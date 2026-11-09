@@ -60,12 +60,22 @@ static func unlocked(index: int) -> bool:
 	return bool(stars(prev.id)[0])
 
 
+# Old saves did not count failures. If the level was never won, every old
+# attempt was a failure; otherwise their outcomes cannot be reconstructed.
+static func failures(id: String) -> int:
+	var rec := level(id)
+	if rec.has("failures"):
+		return int(rec.failures)
+	return 0 if bool(rec.get("stars", [false, false, false])[0]) else int(rec.get("attempts", 0))
+
+
 # Records an attempt; returns the research points it earned (new stars and a
 # correct prediction).
 static func record(id: String, got: Array, predicted_right: bool) -> int:
 	ensure()
 	var rec: Dictionary = data.levels.get(id, {stars = [false, false, false], attempts = 0, predictions_right = 0})
 	var before: Array = rec.stars
+	var previous_failures := failures(id)
 	var earned := 0
 	for k in 3:
 		if got[k] and not before[k]:
@@ -74,6 +84,7 @@ static func record(id: String, got: Array, predicted_right: bool) -> int:
 		earned += 5
 		rec.predictions_right = int(rec.get("predictions_right", 0)) + 1
 	rec.stars = [before[0] or got[0], before[1] or got[1], before[2] or got[2]]
+	rec.failures = previous_failures + (0 if got[0] else 1)
 	rec.attempts = int(rec.get("attempts", 0)) + 1
 	data.levels[id] = rec
 	data.research = int(data.get("research", 0)) + earned

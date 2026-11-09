@@ -107,6 +107,7 @@ func start(l: Dictionary, last_design := {}, entry_at := Vector2.INF) -> void:
 # Diagnostic teaching: past chapter 1, a typical problem in this run's
 # numbers is said once, as it shows (Diagnose).
 func _coach(t: float) -> void:
+	_drop_reminders(t)
 	if Levels.guided(level) or (tutorial != null and is_instance_valid(tutorial)):
 		return
 	if coach_snaps.is_empty() or t - float(coach_snaps.back().t) >= 1.0:
@@ -116,11 +117,37 @@ func _coach(t: float) -> void:
 	if coach_snaps.size() < 2 or t < 15.0:
 		return
 	var resp := int(design.get("params", {}).get("resp", level.get("resp", 0)))
-	for r: Dictionary in Diagnose.read(level, host.sim, eval, coach_snaps.front(), coach_snaps.back(), resp):
+	for r: Dictionary in Diagnose.read(level, host.sim, eval, coach_snaps.front(), coach_snaps.back(), resp, design):
 		if not coach_said.has(r.id):
 			coach_said[r.id] = true
 			host.hud_root.coach_say(r.title, r.text)
 			break # (one at a time)
+
+
+# The virus levels (Q284): with the recommended virus on, the coach says when
+# its drops are due (also under the guide: its last card promises it).
+func _drop_reminders(t: float) -> void:
+	var r := Recommend.for_level(level.id)
+	if not r.has("virus") or not Recommend.virus_same(r, design.get("virus", {})):
+		return
+	var own := not str(level.id) == "4-4"
+	if eval.shots == 0 and t >= Recommend.first_drop(r) and not coach_said.has("drop1"):
+		coach_said.drop1 = true
+		if own:
+			host.hud_root.coach_say("该投噬毒体了", "找自己细胞最多的地方投一团，越早投，后面带有噬毒体的细胞就越多。")
+		else:
+			host.hud_root.coach_say("该投第一团病毒了", "现在绒游丝已经够多了，按 5 或点击「投放病毒」，找绒游丝最多的地方投下去。")
+	elif eval.shots == 1 and not coach_said.has("drop2"):
+		var due := Recommend.second_drop(r)
+		if not own and not eval.shot_times.is_empty():
+			due = float(eval.shot_times[0]) + float(Recommend.drop_gap(r))
+		if t < due:
+			return
+		coach_said.drop2 = true
+		if own:
+			host.hud_root.coach_say("再投一团", "换个细胞多的地方再投一团，让更多细胞带上噬毒体。")
+		else:
+			host.hud_root.coach_say("可以投第二团了", "第一团已经投下去了，现在换一片绒游丝多的地方，再投一团。")
 
 
 # The briefing comes on entering a level past chapter 1 (not on a retry,
@@ -895,12 +922,22 @@ func _on_report_action(what: String, arg: Variant) -> void:
 			# The same design with the recommended genes (DECISIONS 推荐数值).
 			report = null
 			host.paused = false
+			# (Every species' genes, and the virus and the body where the level has them, Q283–Q285.)
 			var dd: Dictionary = (design.design as Dictionary).duplicate(true)
 			var rec := Recommend.for_level(level.id)
-			var g: Array = (dd.genes as Array).duplicate()
-			for k: int in level.get("genes_open", range(8)):
-				g[k] = float(rec.genes[k])
-			dd.genes = g
+			var set_genes := func(now: Array, want: Array) -> Array:
+				var g: Array = now.duplicate()
+				for k: int in level.get("genes_open", range(8)):
+					g[k] = float(want[k])
+				return g
+			dd.genes = set_genes.call(dd.genes, rec.genes)
+			var ds: Array = dd.get("designs", [])
+			for s in mini(ds.size(), Recommend.slots(rec)):
+				ds[s].genes = set_genes.call(ds[s].genes, Recommend.slot_genes(rec, s))
+			if rec.has("virus"):
+				dd.virus = (rec.virus as Dictionary).duplicate()
+			if rec.has("blocks"):
+				dd.blocks = (rec.blocks as Array).duplicate(true)
 			start(level, dd)
 		"retry_guide":
 			report = null
