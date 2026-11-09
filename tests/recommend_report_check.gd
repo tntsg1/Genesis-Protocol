@@ -36,6 +36,9 @@ func _run() -> void:
 	check(CampaignSave.failures(id) == 0, "旧存档已通过时不猜测失败次数")
 	CampaignSave.reset_for_tests()
 	var l := Levels.by_id(id)
+	if id == "2-3":
+		var speed: int = int(Recommend.for_level(id).genes[0])
+		check(str(l.tips[0]).contains("速度调到 %d 级" % speed), "失败提示与猎物推荐速度一致")
 	# A successful attempt must not count as a failure.
 	CampaignSave.record(id, [true, false, false], false)
 	scene.start_level(l)

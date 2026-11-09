@@ -99,7 +99,7 @@ const STEPS := {
 	},
 	"2-3": {
 		design = ["这次要设计两个物种。\n\nA 是猎物，吃藻类；B 是捕食者，吃 A。\n\n记住，只要其中一个物种灭绝，实验就会失败。",
-			{text = "先调整猎物 A。\n\n猎物游得太快，捕食者可能一直追不上，最后饿死。\n\n先把 A 的速度调低一点。", ring = "prey_genes", wait = "prey_genes", goal = "将 A 的速度降到最低。", why = "猎物速度已降低，捕食者更容易追上它们了。"},
+			{text = "先调整猎物 A。\n\n猎物游得太快，捕食者可能一直追不上，最后饿死。\n\n把 A 的速度调到 2 级。", ring = "prey_genes", wait = "prey_genes", goal = "将 A 的速度调到 2 级。", why = "猎物速度已设为 2 级。"},
 			{text = "点击顶部的「B · 捕食者」，切换到捕食者设计。\n\n刺丝囊已经装好了，行为规则也沿用了上一关的「追捕 + 埋伏」。你可以直接修改。", ring = "slot:1", wait = "slot:1"},
 			{text = "这次还开放了「休眠」状态。\n\n捕食者找不到食物时，可以先休眠一段时间，少消耗一些能量。\n\n打开「行为规则」，进入「高级编辑」，点击上方状态栏里的「+」，添加「休眠」。\n\n添加后，进入和退出休眠的规则会自动接好，你可以再修改。", ring = "state_map", wait = "sleep_state", goal = "添加「休眠」状态。"},
 			{text = "两个物种都设置好了。\n\n点击「投放到培养皿」，A 和 B 会一起投放。\n\n接下来观察两边的数量，看看能不能都活到第 6 分钟。", ring = "go", wait = "release", goal = "点击「投放到培养皿」。"}],
@@ -711,7 +711,7 @@ func _met(w: String) -> bool:
 					decks.append(d.sp_slots[k].get("deck", []))
 			return decks.any(func(dk: Array) -> bool: return dk.any(func(c: Dictionary) -> bool: return c.act == Rules.A_TO_SLEEP))
 		"prey_genes":
-			return d != null and d.cur_slot == 0 and float(d.genes[0]) <= 1.0
+			return d != null and d.cur_slot == 0 and is_equal_approx(float(d.genes[0]), 2.0)
 		"race_genes":
 			return d != null and float(d.genes[2]) <= 1.0 and float(d.genes[0]) >= 4.0 and float(d.genes[4]) >= 4.0
 		"armour":
@@ -1250,7 +1250,8 @@ func _place_card() -> void:
 	var vw := vs.x
 	var rr := _ring_rect(str(_v("ring", ""))) if not cur.is_empty() else Rect2()
 	var rules_page: bool = host.designer != null and host.designer.page == "rules"
-	var w := 640.0 if rr.size != Vector2.ZERO else (760.0 if rules_page else 800.0)
+	var body_rec: bool = host.designer != null and host.designer.page == "body" and str(cur.get("rec_kind", "")) == "body"
+	var w := 400.0 if body_rec else (640.0 if rr.size != Vector2.ZERO else (760.0 if rules_page else 800.0))
 	# The width first: it sets how many lines the text wraps to, so the height.
 	if text_label.custom_minimum_size.x != w - 50.0:
 		text_label.custom_minimum_size.x = w - 50.0
@@ -1294,12 +1295,15 @@ func _place_card() -> void:
 				top = under
 				left = clampf(rr.get_center().x - w * 0.5, 452.0, 1872.0 - w)
 				cx = left + w * 0.5 - vw * 0.5
-		# On the body page the card covered the very tiles it asked for (it
-		# docked under the one ringed, over the next ones): it sits over the
-		# gene strip under the scope instead, clear of the tiles, the scope
-		# and the readout, the leader line still reaching the target.
+		# Body recommendations go beside the scope so the board and gene strip
+		# stay visible; other body-guide cards keep their existing position.
 		var bb: Control = host.designer.body_bench if host.designer and host.designer.page == "body" and host.designer.get("body_bench") else null
-		if bb and bb.strand and bb.strand.is_visible_in_tree():
+		if bb and body_rec:
+			var scope_rect: Rect2 = bb.scope.get_global_rect()
+			left = minf(vw - 24.0 - w, scope_rect.end.x + 24.0)
+			top = 110.0
+			cx = left + w * 0.5 - vw * 0.5
+		elif bb and bb.strand and bb.strand.is_visible_in_tree():
 			var sr: Rect2 = bb.strand.get_global_rect()
 			left = clampf(sr.get_center().x - w * 0.5, 24.0, vw - 24.0 - w)
 			top = clampf(sr.position.y, 24.0, vs.y - 24.0 - ch)

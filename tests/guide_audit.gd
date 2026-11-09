@@ -133,7 +133,7 @@ func _do(w: String) -> bool:
 			_gene(0, 3.0)
 			_gene(4, 4.0)
 		"prey_genes":
-			_gene(0, 1.0)
+			_gene(0, 2.0)
 		"race_genes":
 			_gene(2, 1.0)
 			_gene(0, 4.0)

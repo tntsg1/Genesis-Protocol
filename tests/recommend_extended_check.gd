@@ -31,13 +31,13 @@ func shot(name: String) -> void:
 
 func _run() -> void:
 	var which := OS.get_environment("HELP_CASE")
-	var id := {multispecies = "2-3", multi3 = "6-4", multi8 = "8-1", virus = "4-4", body = "5-2"}.get(which, "") as String
+	var id := {multispecies = "2-3", multi3 = "6-4", multi8 = "8-1", virus = "4-4", body = "5-2", body3 = "5-3", body4 = "5-4", body5 = "5-5"}.get(which, "") as String
 	if id.is_empty():
 		print("FAIL  unknown HELP_CASE")
 		quit(1)
 		return
 	var l := Levels.by_id(id)
-	if which == "body" and Recommend.for_level(id).is_empty():
+	if which.begins_with("body") and Recommend.for_level(id).is_empty():
 		# A controlled fixture, separate from the measured recommendation file.
 		var blocks: Array = l.start_design.blocks.duplicate(true)
 		blocks[0][2] = 6 if int(blocks[0][2]) != 6 else 1
@@ -132,8 +132,13 @@ func _run() -> void:
 			g._next()
 			await create_timer(1.0).timeout
 			check(not d.body_bench.rec_marks.is_empty(), "当前引导步骤在身体板上标记")
-			await shot("body")
-			g._apply_rec()
+			var card_rect: Rect2 = g.card.get_global_rect()
+			check(not card_rect.intersects(d.body_bench.scope.get_global_rect()), "推荐卡不遮挡身体板")
+			check(not card_rect.intersects(d.body_bench.strand.get_global_rect()), "推荐卡不遮挡基因条")
+			check(Rect2(Vector2.ZERO, root.get_visible_rect().size).encloses(card_rect), "推荐卡完整显示在画面内")
+			check(g.apply_rec.visible and card_rect.encloses(g.apply_rec.get_global_rect()), "一键套用按钮显示在卡片内")
+			await shot(which)
+			g.apply_rec.pressed.emit()
 		check(Recommend.body_diffs(rec, d.body_bench.cells).is_empty(), "一键套用身体布局")
 		check(str(g.cur.get("wait", "")).begins_with("gene:"), "套用身体后进入基因步骤")
 	print("RESULT: ", "PASS" if fails == 0 else "FAIL %d" % fails)

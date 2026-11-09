@@ -283,9 +283,11 @@ func _level8() -> void:
 	check(d.slot_tabs.size() == 2 and d.cur_slot == 0, "2-3: two species tabs, A first")
 	check(d.state_bar != null and d.state_bar.is_visible_in_tree() == false, "2-3: a state map on the rules page")
 	await _until(func() -> bool: return _says("两个物种"))
+	d.gene_sliders[0].value = 3.0
+	d.gene_sliders[0].changed.emit(3.0)
 	g._next()
 	check(await _until(func() -> bool: return _says("猎物 A")), "2-3: the prey-genes step")
-	for kv in [[0, 1.0]]:
+	for kv in [[0, 2.0]]:
 		d.gene_sliders[kv[0]].value = kv[1]
 		d.gene_sliders[kv[0]].changed.emit(kv[1])
 	check(await _until(func() -> bool: return _says("B · 捕食者")), "2-3: on to the predator tab")
@@ -308,7 +310,7 @@ func _level8() -> void:
 	await create_timer(0.6).timeout
 	await _shot("states")
 	d.slot_tabs[0].pressed.emit()
-	check(d.cur_slot == 0 and d.organs.is_empty() and float(d.genes[0]) <= 1.0, "2-3: back to A: its own genes kept")
+	check(d.cur_slot == 0 and d.organs.is_empty() and is_equal_approx(float(d.genes[0]), 2.0), "2-3: back to A: its own genes kept")
 	check(await _until(func() -> bool: return _says("投放"), 8.0), "2-3: then release (the nap-card step is already met)")
 	d.release()
 	check(await _until(func() -> bool: return scene.level_runner.phase == "run", 15.0), "2-3: released, the clock runs")
