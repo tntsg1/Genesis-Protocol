@@ -403,6 +403,8 @@ func _lint(id: String) -> void:
 	# The guided design, for tests/recommend_bot.gd to start from.
 	var g: Dictionary = d._design()
 	designs[id] = {genes = g.genes, deck = g.deck, organs = g.organs, resp = g.resp, life = g.life, euk = g.get("euk", false), acid_tol = g.get("acid_tol", 0.0), temp_opt = g.temp_opt, slots = d.sp_slots.size()}
+	if d.go.disabled:
+		_bad(id, "投放按钮点不了：%s" % d.go_hint.text)
 	for k in e.deck.size():
 		var wn: String = e.warning(k)
 		if wn != "":
@@ -427,6 +429,14 @@ func _run() -> void:
 		_say("- " + p)
 	var f := FileAccess.open(ProjectSettings.globalize_path("res://proofs/guide_audit.txt"), FileAccess.WRITE)
 	f.store_string("\n".join(lines))
-	var f2 := FileAccess.open(ProjectSettings.globalize_path("res://proofs/guide_designs.txt"), FileAccess.WRITE)
-	f2.store_string(var_to_str(designs))
+	# (Merged with what is there: a run over a few levels keeps the others.)
+	var path := ProjectSettings.globalize_path("res://proofs/guide_designs.txt")
+	var all := {}
+	if FileAccess.file_exists(path):
+		var old: Variant = str_to_var(FileAccess.get_file_as_string(path))
+		if old is Dictionary:
+			all = old
+	all.merge(designs, true)
+	var f2 := FileAccess.open(path, FileAccess.WRITE)
+	f2.store_string(var_to_str(all))
 	quit()

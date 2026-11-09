@@ -1896,6 +1896,9 @@ func _build_footer() -> void:
 		_set_resp(Resp.next(resp))
 		_toast("呼吸方式：%s。%s" % [Resp.name_of(resp), Resp.LIST[resp][2]]))
 	h.add_child(resp_pill)
+	# (A new design breathes the level's way: 8-4's swamp is all oxygen up top.)
+	if level_rules.has("resp") and not (level_rules.get("design", {}) as Dictionary).has("resp"):
+		resp = int(level_rules.resp)
 	_set_resp(resp)
 	# The sandbox: whether the body page's blocks make the species.
 	if level_rules.is_empty():

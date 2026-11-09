@@ -79,10 +79,11 @@ func _neighbours(l: Dictionary, g: Dictionary, base: Array) -> Array:
 	return out
 
 
-# [goal wins, challenge wins, -budget used]: more is better, in that order.
+# [goal wins, challenge wins, -budget used].
 func _score(l: Dictionary, g: Dictionary, genes: Array, seeds: int) -> Array:
 	var d := LevelEval.design_from_genes(genes, (g.deck as Array).duplicate(true), Color(0.5, 0.8, 0.9), float(g.get("temp_opt", 12.0)), true, (g.organs as Array).duplicate(), l.id)
-	d.params.resp = int(g.get("resp", l.get("resp", 0)))
+	# (How it breathes: the level's own unless the level opens the switch.)
+	d.params.resp = int(g.get("resp", 0)) if l.get("resp_open", false) else int(l.get("resp", 0))
 	d.params.life = float(g.get("life", 1.0))
 	d.params.lifespan = float(d.params.lifespan) * float(g.get("life", 1.0))
 	d.params.slow_divide = 1.0 + 0.4 * (float(g.get("life", 1.0)) - 1.0) if float(g.get("life", 1.0)) >= 1.0 else 1.0 - 0.4 * (1.0 - float(g.get("life", 1.0)))
@@ -112,8 +113,10 @@ func _score(l: Dictionary, g: Dictionary, genes: Array, seeds: int) -> Array:
 	return [goal, ch, -used]
 
 
+# Only a set that passes more (goal, then challenge) replaces the guide's
+# own: same results for fewer points is no reason to undo what it taught.
 func _better(a: Array, b: Array) -> bool:
-	for k in a.size():
+	for k in 2:
 		if a[k] != b[k]:
 			return a[k] > b[k]
 	return false
